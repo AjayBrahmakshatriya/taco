@@ -10,6 +10,7 @@
 
 namespace taco {
 class Format;
+class TensorBase;
 namespace ir {
 class Stmt;
 }
@@ -28,7 +29,7 @@ Storage pack(const std::vector<int>&              dimensionSizes,
 /// generated code the coordinates must be stored as a structure of arrays,
 /// that is one vector per axis coordinate and one vector for the values.
 /// The coordinates must be sorted lexicographically.
-ir::Stmt packCode(const Format& format);
+ir::Stmt packCode(const TensorBase& format);
 
 }}
 #endif

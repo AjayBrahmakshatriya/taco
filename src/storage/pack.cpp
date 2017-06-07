@@ -1,10 +1,13 @@
 #include "taco/storage/pack.h"
 
+#include "taco/tensor.h"
 #include "taco/format.h"
 #include "taco/error.h"
 #include "ir/ir.h"
 #include "taco/storage/storage.h"
 #include "taco/util/collections.h"
+
+#include <string>
 
 using namespace std;
 
@@ -266,10 +269,39 @@ Storage pack(const std::vector<int>&              dimensions,
   return storage;
 }
 
-ir::Stmt packCode(const Format& format) {
+ir::Stmt emitPushBack(ir::Expr arr, ir::Expr idx, ir::Expr val, ir::Expr size) { 
   using namespace taco::ir;
 
-  vector<Stmt> packStmts;
+  Stmt store = Store::make(arr, idx, val);
+  Stmt idxInc = VarAssign::make(idx, Add::make(idx, 1));
+
+  Expr doResize = Lte::make(size, idx);
+  Stmt incSize = VarAssign::make(size, Mul::make(2, idx));
+  Stmt resize = Allocate::make(arr, size, true);
+  resize = IfThenElse::make(doResize, Block::make({incSize, resize}));
+
+  return Block::make({store, idxInc, resize});
+}
+
+ir::Stmt emitFFLoop(ir::Expr cend, ir::Expr cbegin, ir::Expr end, ir::Expr idx, 
+                    ir::Expr coords) {
+  using namespace taco::ir;
+
+  Stmt initEnd = VarAssign::make(cend, cbegin, true);
+  Expr ffCond = And::make(Lt::make(cend, end), 
+                          Eq::make(Load::make(coords, cend), idx));
+  Stmt ffLoop = While::make(ffCond, VarAssign::make(cend, Add::make(cend, 1)));
+
+  return Block::make({initEnd, ffLoop});
+}
+
+ir::Stmt packCode(const TensorBase& tensor) {
+  using namespace taco::ir;
+
+  const Format& format = tensor.getFormat();
+  std::cout << format << std::endl;
+
+  std::vector<Stmt> packStmts;
 
   // Generate loops to count the size of each level.
 //  ir::Stmt countLoops;
@@ -279,28 +311,118 @@ ir::Stmt packCode(const Format& format) {
 //    }
 //  }
 
-  // Loops to insert index values
-  Stmt insertLoop;
-  for (DimensionType dimType : util::reverse(format.getDimensionTypes())) {
-    Stmt body = insertLoop.defined()
-        ? insertLoop
-        : VarAssign::make(Var::make("test", Type::Int), 1.0, true);
+  const size_t order = format.getDimensionTypes().size();
 
+  std::vector<Expr> begins, ends, posPtrs, idxPtrs, posSizes, idxSizes, coords;
+  for (size_t i = 0; i < order; ++i) {
+    const auto idx = std::to_string(i);
+    begins.push_back(Var::make("begin" + idx, Type::Int));
+    ends.push_back(Var::make("end" + idx, Type::Int));
+    posPtrs.push_back(Var::make("posPtr" + idx, Type::Int));
+    idxPtrs.push_back(Var::make("idxPtr" + idx, Type::Int));
+    posSizes.push_back(Var::make("posSize" + idx, Type::Int));
+    idxSizes.push_back(Var::make("idxSize" + idx, Type::Int));
+    coords.push_back(Var::make("coords" + idx, Type::Int, true));
+  }
+  idxPtrs.push_back(Var::make("valPtr", Type::Int));
+  idxSizes.push_back(Var::make("valSize", Type::Int));
+
+  Expr vals = Var::make("vals", Type(Type::Float, 64), true);
+  Expr tensorVar = Var::make(tensor.getName(), Type(Type::Float, 64));
+
+  // Loops to insert index values
+  Expr elem = Var::make("elem", Type(Type::Float, 64));
+  Expr initCond = Lt::make(begins.back(), ends.back());
+  Expr tensorVals = GetProperty::make(tensorVar, TensorProperty::Values);
+  Expr loadVal = Load::make(vals, begins.back());
+  Stmt declElem = VarAssign::make(elem, 0.0, true);
+  Stmt initElem = IfThenElse::make(initCond, VarAssign::make(elem, loadVal));
+  Stmt insertElem = emitPushBack(tensorVals, idxPtrs.back(), elem, 
+                                 idxSizes.back());
+  Stmt insertLoop = Block::make({declElem, initElem, insertElem}); 
+
+  for (size_t j = 0; j < order; ++j) {
+    const auto i = order - j - 1;
+    const auto dimType = format.getDimensionTypes()[i];
+
+    Expr idxVar = Var::make("idx" + std::to_string(i), Type::Int);
+
+    Stmt initBegin = VarAssign::make(begins[i], 
+                                     (i == 0) ? 0 : begins[i - 1], true);
+
+    Stmt innerLoop;
     switch (dimType) {
       case Dense: {
-        Expr dimSize = 10;
-        Expr loopVar = Var::make("i", Type::Int);
-        insertLoop = ir::For::make(loopVar, 0, dimSize, 1, body);
+        Stmt ffLoop = emitFFLoop(ends[i], begins[i], 
+                                 (i == 0) ? 1024 : ends[i - 1], 
+                                 idxVar, coords[i]);
+        Stmt incBegin = VarAssign::make(begins[i], ends[i]);
+        Stmt body = Block::make({ffLoop, insertLoop, incBegin});
+        
+        Expr dimSize = GetProperty::make(tensorVar, 
+                                         TensorProperty::Dimensions, i);
+        innerLoop = For::make(idxVar, 0, dimSize, 1, body);
         break;
       }
       case Sparse: {
+        Expr loadIdx = Load::make(coords[i], begins[i]);
+        Stmt idxInit = VarAssign::make(idxVar, loadIdx, true);
+
+        const auto idxName = tensor.getName() + std::to_string(i) + "_idx_arr";
+        Expr idxArr = GetProperty::make(tensorVar, TensorProperty::Indices, 
+                                        i, 1, idxName);
+        Stmt insertIdx = emitPushBack(idxArr, idxPtrs[i], idxVar, idxSizes[i]);
+
+        Expr count = Var::make("count" + std::to_string(i), Type::Int);
+        Stmt ffLoop = emitFFLoop(ends[i], begins[i], 
+                                 (i == 0) ? 1024 : ends[i - 1], 
+                                 idxVar, coords[i]);
+        Stmt incBegin = VarAssign::make(begins[i], ends[i]);
+        Stmt incCount = VarAssign::make(count, Add::make(count, 1));
+        Stmt body = Block::make({idxInit, insertIdx, ffLoop, insertLoop, 
+                                 incBegin, incCount});
+
+        Expr loopCond = Lt::make(begins[i], (i == 0) ? 1024 : ends[i - 1]);
+        Stmt loop = While::make(loopCond, body);
+
+        const auto posName = tensor.getName() + std::to_string(i) + "_pos_arr";
+        Expr posArr = GetProperty::make(tensorVar, TensorProperty::Indices, 
+                                        i, 0, posName);
+        Stmt insertPos = emitPushBack(posArr, posPtrs[i], count, posSizes[i]);
+        
+        Stmt initCount = VarAssign::make(count, 0, true);
+        innerLoop = Block::make({initCount, loop, insertPos});
         break;
+      
+//      auto indexValues = getUniqueEntries(levelCoords.begin()+begin,
+//                                          levelCoords.begin()+end);
+//
+//      // Store segment end: the size of the stored segment is the number of
+//      // unique values in the coordinate list
+//      index[0].push_back((int)(index[1].size() + indexValues.size()));
+//
+//      // Store unique index values for this segment
+//      index[1].insert(index[1].end(), indexValues.begin(), indexValues.end());
+//
+//      // Iterate over each index value and recursively pack it's segment
+//      size_t cbegin = begin;
+//      for (size_t j : indexValues) {
+//        // Scan to find segment range of children
+//        size_t cend = cbegin;
+//        while (cend < end && levelCoords[cend] == (int)j) {
+//          cend++;
+//        }
+//        PACK_NEXT_LEVEL(cend);
+//        cbegin = cend;
+//      }
       }
       case Fixed: {
         taco_not_supported_yet;
         break;
       }
     }
+
+    insertLoop = Block::make({initBegin, innerLoop});
   }
   packStmts.push_back(insertLoop);
 
