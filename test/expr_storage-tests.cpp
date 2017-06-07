@@ -313,19 +313,19 @@ INSTANTIATE_TEST_CASE_P(vector_composites, expr,
                       }
                     },
                     {10, 200, 60, 0, 0, 1200, 0, 0}
-           //         ),
-           //TestData(Tensor<double>("a",{8},Format({Dense})),
-           //         {i}, 
-           //         (d8b("c",Format({Sparse}))(i) +
-           //          d8c("d",Format({Dense}))(i)) * 
-           //          d8a("b",Format({Sparse}))(i),
-           //         {
-           //           {
-           //             // Dense index
-           //             {8}
-           //           }
-           //         },
-           //         {10, 200, 60, 0, 0, 1200, 0, 0}
+                    ),
+           TestData(Tensor<double>("a",{8},Format({Dense})),
+                    {i}, 
+                    (d8b("c",Format({Sparse}))(i) +
+                     d8c("d",Format({Dense}))(i)) * 
+                     d8a("b",Format({Sparse}))(i),
+                    {
+                      {
+                        // Dense index
+                        {8}
+                      }
+                    },
+                    {10, 200, 60, 0, 0, 1200, 0, 0}
                     )
            )
 );
@@ -673,7 +673,6 @@ INSTANTIATE_TEST_CASE_P(axpy_3x3, expr,
                     },
                     {6, 0, 16}
                     ),
-/*
            TestData(Tensor<double>("a",{3},Format({Dense})),
                     {i},
                     d33a("B",Format({Sparse,Sparse}))(i,k) *
@@ -687,7 +686,6 @@ INSTANTIATE_TEST_CASE_P(axpy_3x3, expr,
                     },
                     {6, 0, 16}
                     ),
-*/
            TestData(Tensor<double>("a",{3},Format({Dense})),
                     {i},
                       da("alpha",Format())() *

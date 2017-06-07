@@ -16,7 +16,7 @@
 #include "tensor_path.h"
 #include "merge_lattice.h"
 #include "iteration_schedule.h"
-#include "available_exprs.h"
+#include "expr_tools.h"
 #include "taco/expr_nodes/expr_nodes.h"
 #include "taco/expr_nodes/expr_rewriter.h"
 #include "storage/iterator.h"
@@ -30,11 +30,7 @@ namespace taco {
 namespace lower {
 
 using namespace taco::ir;
-using namespace expr_nodes;
-
-using taco::ir::Expr;
-using taco::ir::Var;
-using taco::ir::Add;
+using namespace taco::expr_nodes;
 using taco::storage::Iterator;
 
 struct Context {
@@ -48,7 +44,7 @@ struct Context {
   Iterators            iterators;
 
   /// The size of initial memory allocations
-  ir::Expr             allocSize;
+  Expr                 allocSize;
 
   /// Maps tensor (scalar) temporaries to IR variables.
   /// (Not clear if this approach to temporaries is too hacky.)
@@ -56,8 +52,8 @@ struct Context {
 };
 
 struct Target {
-  ir::Expr tensor;
-  ir::Expr pos;
+  Expr tensor;
+  Expr pos;
 };
 
 enum ComputeCase {
@@ -77,20 +73,17 @@ enum ComputeCase {
   BELOW_LAST_FREE
 };
 
-static
-ComputeCase getComputeCase(const IndexVar& indexVar,
-                           const IterationSchedule& schedule) {
-  ComputeCase computeCase;
+static ComputeCase getComputeCase(const IndexVar& indexVar,
+                                  const IterationSchedule& schedule) {
   if (schedule.isLastFreeVariable(indexVar)) {
-    computeCase = LAST_FREE;
+    return LAST_FREE;
   }
   else if (schedule.hasFreeVariableDescendant(indexVar)) {
-    computeCase = ABOVE_LAST_FREE;
+    return ABOVE_LAST_FREE;
   }
   else {
-    computeCase = BELOW_LAST_FREE;
+    return BELOW_LAST_FREE;
   }
-  return computeCase;
 }
 
 /// Returns true iff the lattice must be merged, false otherwise. A lattice
@@ -110,82 +103,127 @@ static bool needsMerge(MergeLattice lattice) {
   return false;
 }
 
-static Iterator getIterator(std::vector<storage::Iterator>& iterators) {
-  taco_iassert(!iterators.empty());
-
-  Iterator iter = iterators[0];
-  for (size_t i = 1; i < iterators.size(); ++i) {
-    if (!iterators[i].isRandomAccess()) {
-      iter = iterators[i];
-    }
+static IndexExpr emitAvailableExprs(const IndexVar& indexVar,
+                                    const IndexExpr& indexExpr, Context* ctx,
+                                    vector<Stmt>* stmts) {
+  vector<IndexVar>  visited    = ctx->schedule.getAncestors(indexVar);
+  vector<IndexExpr> availExprs = getAvailableExpressions(indexExpr, visited);
+  map<IndexExpr,IndexExpr> substitutions;
+  for (const IndexExpr& availExpr : availExprs) {
+    TensorBase t("t" + indexVar.getName(), ComponentType::Double);
+    substitutions.insert({availExpr, taco::Access(t)});
+    Expr tensorVar = Var::make(t.getName(), Type(Type::Float,64));
+    ctx->temporaries.insert({t, tensorVar});
+    Expr expr = lowerToScalarExpression(availExpr, ctx->iterators,
+                                        ctx->schedule, ctx->temporaries);
+    stmts->push_back(VarAssign::make(tensorVar, expr, true));
   }
-  return iter;
+  return replace(indexExpr, substitutions);
 }
 
-// Retrieves the minimal sub-expression that covers all the index variables
-static IndexExpr getSubExpr(IndexExpr expr, const vector<IndexVar>& vars) {
-  class SubExprVisitor : public expr_nodes::ExprVisitor {
-  public:
-    SubExprVisitor(const vector<IndexVar>& vars) {
-      this->vars.insert(vars.begin(), vars.end());
+static void emitComputeExpr(const Target& target, const IndexVar& indexVar,
+                            const IndexExpr& indexExpr, const Context& ctx,
+                            vector<Stmt>* stmts) {
+  Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators,
+                                      ctx.schedule, ctx.temporaries);
+  if (target.pos.defined()) {
+    Stmt store = ctx.schedule.hasReductionVariableAncestor(indexVar)
+        ? compoundStore(target.tensor, target.pos, expr)
+        :   Store::make(target.tensor, target.pos, expr);
+    stmts->push_back(store);
+  }
+  else {
+    Stmt assign = ctx.schedule.hasReductionVariableAncestor(indexVar)
+        ?  compoundAssign(target.tensor, expr)
+        : VarAssign::make(target.tensor, expr);
+    stmts->push_back(assign);
+  }
+}
+
+static bool isParallelizable(const IndexVar& indexVar, const Context& ctx) {
+  TensorPath resultPath = ctx.schedule.getResultTensorPath();
+  for (size_t i = 0; i < resultPath.getSize(); i++){
+    if (!ctx.iterators[resultPath.getStep(i)].isDense()) {
+      return false;
     }
+  }
+  return ctx.schedule.getAncestors(indexVar).size() == 1 &&
+         ctx.schedule.isFree(indexVar);
+}
 
-    IndexExpr getSubExpression(const IndexExpr& expr) {
-      visit(expr);
-      IndexExpr e = subExpr;
-      subExpr = IndexExpr();
-      return e;
+/// Expression evaluates to true iff none of the iteratators are exhausted
+static Expr noneExhausted(const vector<Iterator>& iterators) {
+  vector<Expr> stepIterLqEnd;
+  for (auto& iter : iterators) {
+    stepIterLqEnd.push_back(Lt::make(iter.getIteratorVar(), iter.end()));
+  }
+  return conjunction(stepIterLqEnd);
+}
+
+/// Expression evaluates to true iff all the iterator idx vars are equal to idx
+/// or if there are no iterators.
+static Expr allEqualTo(const vector<Iterator>& iterators, Expr idx) {
+  if (iterators.size() == 0) {
+    return Literal::make(true);
+  }
+
+  vector<Expr> iterIdxEqualToIdx;
+  for (auto& iter : iterators) {
+    iterIdxEqualToIdx.push_back(Eq::make(iter.getIdxVar(), idx));
+  }
+  return conjunction(iterIdxEqualToIdx);
+}
+
+/// Returns the iterator for the `idx` variable from `iterators`, or Iterator()
+/// none of the iterator iterate over `idx`.
+static Iterator getIterator(const Expr& idx,
+                            const vector<Iterator>& iterators) {
+  for (auto& iterator : iterators) {
+    if (iterator.getIdxVar() == idx) {
+      return iterator;
     }
+  }
+  return Iterator();
+}
 
-  private:
-    set<IndexVar> vars;
-    IndexExpr     subExpr;
-
-    using taco::expr_nodes::ExprVisitorStrict::visit;
-
-    void visit(const expr_nodes::ReadNode* op) {
-      for (auto& indexVar : op->indexVars) {
-        if (util::contains(vars, indexVar)) {
-          subExpr = op;
-          return;
-        }
-      }
-      subExpr = IndexExpr();
+static vector<Iterator> removeIterator(const Expr& idx,
+                                       const vector<Iterator>& iterators) {
+  vector<Iterator> result;
+  for (auto& iterator : iterators) {
+    if (iterator.getIdxVar() != idx) {
+      result.push_back(iterator);
     }
+  }
+  return result;
+}
 
-    void visit(const expr_nodes::UnaryExprNode* op) {
-      IndexExpr a = getSubExpression(op->a);
-      if (a.defined()) {
-        subExpr = a;
-      }
-      else {
-        subExpr = IndexExpr();
-      }
+static Stmt createIfStatements(vector<pair<Expr,Stmt>> cases,
+                               const MergeLattice& lattice) {
+  if (!needsMerge(lattice)) {
+    return cases[0].second;
+  }
+
+  vector<pair<Expr,Stmt>> ifCases;
+  pair<Expr,Stmt> elseCase;
+  for (auto& cas : cases) {
+    auto lit = cas.first.as<Literal>();
+    if (lit != nullptr && lit->type == Type(Type::UInt,1) && lit->value == 1){
+      taco_iassert(!elseCase.first.defined()) <<
+          "there should only be one true case";
+      elseCase = cas;
     }
-
-    void visit(const expr_nodes::BinaryExprNode* op) {
-      IndexExpr a = getSubExpression(op->a);
-      IndexExpr b = getSubExpression(op->b);
-      if (a.defined() && b.defined()) {
-        subExpr = op;
-      }
-      else if (a.defined()) {
-        subExpr = a;
-      }
-      else if (b.defined()) {
-        subExpr = b;
-      }
-      else {
-        subExpr = IndexExpr();
-      }
+    else {
+      ifCases.push_back(cas);
     }
+  }
 
-    void visit(const expr_nodes::ImmExprNode* op) {
-      subExpr = op;
-    }
-
-  };
-  return SubExprVisitor(vars).getSubExpression(expr);
+  if (elseCase.first.defined()) {
+    ifCases.push_back(elseCase);
+    return Case::make(ifCases, true);
+  }
+  else {
+    return Case::make(ifCases, lattice.isFull());
+  }
 }
 
 static vector<Stmt> lower(const Target&    target,
@@ -196,7 +234,6 @@ static vector<Stmt> lower(const Target&    target,
 
   MergeLattice lattice = MergeLattice::make(indexExpr, indexVar, ctx.schedule,
                                             ctx.iterators);
-  auto         latticeIterators = lattice.getIterators();
 
   TensorPath     resultPath     = ctx.schedule.getResultTensorPath();
   TensorPathStep resultStep     = resultPath.getStep(indexVar);
@@ -208,12 +245,10 @@ static vector<Stmt> lower(const Target&    target,
   bool emitAssemble = util::contains(ctx.properties, Assemble);
   bool emitMerge    = needsMerge(lattice);
 
-  // Emit code to initialize pos variables: B2_ptr = B.d2.ptr[B1_pos];
+  // Emit code to initialize pos variables:
+  // B2_pos = B2_pos_arr[B1_pos];
   if (emitMerge) {
-    for (auto& iterator : latticeIterators) {
-      Expr ptr = iterator.getPtrVar();
-      Expr ptrPrev = iterator.getParent().getPtrVar();
-      Expr tvar = iterator.getTensor();
+    for (auto& iterator : lattice.getIterators()) {
       Expr iteratorVar = iterator.getIteratorVar();
       Stmt iteratorInit = VarAssign::make(iteratorVar, iterator.begin(), true);
       code.push_back(iteratorInit);
@@ -223,12 +258,14 @@ static vector<Stmt> lower(const Target&    target,
   // Emit one loop per lattice point lp
   vector<Stmt> loops;
   for (MergeLatticePoint lp : lattice) {
-    vector<Stmt> loopBody;
-
+    MergeLattice lpLattice = lattice.getSubLattice(lp);
     auto lpIterators = lp.getIterators();
 
+    vector<Stmt> loopBody;
+
     // Emit code to initialize sequential access idx variables:
-    // int kB = B.d2.idx[B2_ptr];
+    // int kB = B1_idx_arr[B1_pos];
+    // int kc = c0_idx_arr[c0_pos];
     vector<Expr> mergeIdxVariables;
     auto sequentialAccessIterators = getSequentialAccessIterators(lpIterators);
     for (Iterator& iterator : sequentialAccessIterators) {
@@ -237,13 +274,14 @@ static vector<Stmt> lower(const Target&    target,
       mergeIdxVariables.push_back(iterator.getIdxVar());
     }
 
-    // Emit code to initialize the index variable: k = min(kB, kc);
+    // Emit code to initialize the index variable:
+    // k = min(kB, kc);
     Expr idx = (lp.getMergeIterators().size() > 1)
                ? min(indexVar.getName(), lp.getMergeIterators(), &loopBody)
                : lp.getMergeIterators()[0].getIdxVar();
 
-    // Emit code to initialize random access ptr variables:
-    // B2_ptr = (B1_ptr*3) + k;
+    // Emit code to initialize random access pos variables:
+    // D1_pos = (D0_pos * 3) + k;
     auto randomAccessIterators =
         getRandomAccessIterators(util::combine(lpIterators, {resultIterator}));
     for (Iterator& iterator : randomAccessIterators) {
@@ -254,224 +292,147 @@ static vector<Stmt> lower(const Target&    target,
     }
 
     // Emit one case per lattice point in the sub-lattice rooted at lp
-    MergeLattice lpLattice = lattice.getSubLattice(lp);
     vector<pair<Expr,Stmt>> cases;
     for (MergeLatticePoint& lq : lpLattice) {
       IndexExpr lqExpr = lq.getExpr();
-
-      // Case expression
-      vector<Expr> stepIdxEqIdx;
-      // TODO: Fix below iteration
-      for (auto& iter : lq.getRangeIterators()) {
-        stepIdxEqIdx.push_back(Eq::make(iter.getIdxVar(), idx));
-      }
-      Expr caseExpr = conjunction(stepIdxEqIdx);
-
-      // Case body
       vector<Stmt> caseBody;
 
-      // Emit compute code. Cases: ABOVE_LAST_FREE, LAST_FREE or BELOW_LAST_FREE
-      ComputeCase computeCase = getComputeCase(indexVar, ctx.schedule);
+      // Emit compute code for three cases: above, at or below the last free var
+      ComputeCase indexVarCase = getComputeCase(indexVar, ctx.schedule);
 
-      // Emit available sub-expressions at this level
-      if (ABOVE_LAST_FREE == computeCase && emitCompute) {
-        vector<IndexVar>  visited    = ctx.schedule.getAncestors(indexVar);
-        vector<IndexExpr> availExprs = getAvailableExpressions(lqExpr,visited);
-
-        map<IndexExpr,IndexExpr> substitutions;
-        for (const IndexExpr& availExpr : availExprs) {
-          // Ignore expressions we've already emitted in a higher loop
-          if (isa<expr_nodes::ReadNode>(availExpr) &&
-              util::contains(ctx.temporaries,
-                             to<expr_nodes::ReadNode>(availExpr)->tensor)) {
-            continue;
-          }
-
-          TensorBase t(util::uniqueName("t"), ComponentType::Double);
-          substitutions.insert({availExpr, taco::Access(t)});
-
-          Expr tensorVar = Var::make(t.getName(), Type(Type::Float,64));
-          ctx.temporaries.insert({t, tensorVar});
-
-          Expr availIRExpr = lowerToScalarExpression(availExpr, ctx.iterators,
-                                                     ctx.schedule,
-                                                     ctx.temporaries);
-          caseBody.push_back(VarAssign::make(tensorVar, availIRExpr, true));
-        }
-        lqExpr = expr_nodes::replace(lqExpr, substitutions);
+      // Emit available sub-expressions at this loop level
+      if (emitCompute && ABOVE_LAST_FREE == indexVarCase) {
+        lqExpr = emitAvailableExprs(indexVar, lqExpr, &ctx, &caseBody);
       }
 
       // Recursive call to emit iteration schedule children
       for (auto& child : ctx.schedule.getChildren(indexVar)) {
-        IndexExpr childExpr;
-        Target childTarget;
-        switch (computeCase) {
-          case ABOVE_LAST_FREE: {
-            childTarget.tensor = target.tensor;
-            childTarget.pos    = target.pos;
-            childExpr = lqExpr;
-            break;
+        IndexExpr childExpr = lqExpr;
+        Target childTarget = target;
+        if (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE) {
+          // Extract the expression to compute at the next level. If there's no
+          // computation on the next level for this lattice case then skip it
+          childExpr = getSubExpr(lqExpr, ctx.schedule.getDescendants(child));
+          if (!childExpr.defined()) continue;
+
+          // Reduce child expression into temporary
+          TensorBase t("t" + child.getName(), ComponentType::Double);
+          Expr tensorVar = Var::make(t.getName(), Type(Type::Float,64));
+          ctx.temporaries.insert({t, tensorVar});
+          childTarget.tensor = tensorVar;
+          childTarget.pos    = Expr();
+          if (emitCompute) {
+            caseBody.push_back(VarAssign::make(tensorVar, 0.0, true));
           }
-          case LAST_FREE:
-          case BELOW_LAST_FREE: {
-            TensorBase t( "t" + child.getName(), ComponentType::Double);
-            Expr tensorVar = Var::make(t.getName(), Type(Type::Float,64));
-            ctx.temporaries.insert({t, tensorVar});
 
-            // Extract the expression to compute at the next level
-            childExpr = getSubExpr(lqExpr, ctx.schedule.getDescendants(child));
-
-            // Rewrite lqExpr to substitute the expression computed at the next
-            // level with the temporary
-            lqExpr = expr_nodes::replace(lqExpr, {{childExpr,taco::Access(t)}});
-
-            // Reduce child expression into temporary
-            util::append(caseBody, {VarAssign::make(tensorVar, 0.0, true)});
-            childTarget.tensor = tensorVar;
-            childTarget.pos    = Expr();
-            break;
-          }
+          // Rewrite lqExpr to substitute the expression computed at the next
+          // level with the temporary
+          lqExpr = replace(lqExpr, {{childExpr,taco::Access(t)}});
         }
-        taco_iassert(childExpr.defined());
         auto childCode = lower::lower(childTarget, childExpr, child, ctx);
         util::append(caseBody, childCode);
       }
 
       // Emit code to compute and store/assign result 
-      if (emitCompute) {
-        switch (computeCase) {
-          case ABOVE_LAST_FREE:
-            // Nothing to do
-            break;
-          case LAST_FREE:
-          case BELOW_LAST_FREE: {
-            Expr scalarExpr = lowerToScalarExpression(lqExpr, ctx.iterators,
-                                                      ctx.schedule,
-                                                      ctx.temporaries);
-            if (target.pos.defined()) {
-              Stmt store = ctx.schedule.hasReductionVariableAncestor(indexVar)
-                  ? compoundStore(target.tensor, target.pos, scalarExpr)
-                  :   Store::make(target.tensor, target.pos, scalarExpr);
-              caseBody.push_back(store);
-            }
-            else {
-              Stmt assign = ctx.schedule.hasReductionVariableAncestor(indexVar)
-                  ?  compoundAssign(target.tensor, scalarExpr)
-                  : VarAssign::make(target.tensor, scalarExpr);
-              caseBody.push_back(assign);
-            }
-            break;
-          }
-        }
+      if (emitCompute &&
+          (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
+        emitComputeExpr(target, indexVar, lqExpr, ctx, &caseBody);
       }
 
       // Emit a store of the index variable value to the result idx index array
-      // A.d2.idx[A2_ptr] = j;
+      // A2_idx_arr[A2_pos] = j;
       if (emitAssemble && resultIterator.defined()){
         Stmt idxStore = resultIterator.storeIdx(idx);
         if (idxStore.defined()) {
-          util::append(caseBody, {idxStore});
+          caseBody.push_back(idxStore);
         }
       }
 
-      // Emit code to increment the results iterator variable
+      // Emit code to increment the result `pos` variable and to allocate
+      // additional storage for result `idx` and `pos` arrays
       if (resultIterator.defined() && resultIterator.isSequentialAccess()) {
-        Expr resultPos = resultIterator.getPtrVar();
-        Stmt posInc = VarAssign::make(resultPos, Add::make(resultPos, 1));
+        Expr rpos = resultIterator.getPtrVar();
+        Stmt posInc = VarAssign::make(rpos, Add::make(rpos, 1));
 
-        Expr doResize = ir::And::make(
-            Eq::make(0, BitAnd::make(Add::make(resultPos, 1), resultPos)),
-            Lte::make(ctx.allocSize, Add::make(resultPos, 1)));
-        Expr newSize = ir::Mul::make(2, ir::Add::make(resultPos, 1));
-        Stmt resizeIndices = resultIterator.resizeIdxStorage(newSize);
+        // Conditionally resize result `idx` and `pos` arrays
+        if (emitAssemble) {
+          Expr resize =
+              And::make(Eq::make(0, BitAnd::make(Add::make(rpos, 1), rpos)),
+                        Lte::make(ctx.allocSize, Add::make(rpos, 1)));
+          Expr newSize = ir::Mul::make(2, ir::Add::make(rpos, 1));
 
-        if (resultStep != resultPath.getLastStep()) {
-          // Emit code to resize idx and ptr
-          if (emitAssemble) {
-            auto nextStep = resultPath.getStep(resultStep.getStep()+1);
-            Iterator iterNext = ctx.iterators[nextStep];
-            Stmt resizePos = iterNext.resizePtrStorage(newSize);
-            if (resizePos.defined()) {
-              resizeIndices = Block::make({resizeIndices, resizePos});
-            }
-            resizeIndices = IfThenElse::make(doResize, resizeIndices);
-            posInc = Block::make({posInc, resizeIndices});
+          // Resize result `idx` array
+          Stmt resizeIndices = resultIterator.resizeIdxStorage(newSize);
+
+          // Resize result `pos` array
+          if (indexVarCase == ABOVE_LAST_FREE) {
+            auto nextStep = resultPath.getStep(resultStep.getStep() + 1);
+            Stmt resizePos = ctx.iterators[nextStep].resizePtrStorage(newSize);
+            resizeIndices = Block::make({resizeIndices, resizePos});
           }
+          posInc = Block::make({posInc,IfThenElse::make(resize,resizeIndices)});
+        }
 
+        // Only increment `pos` if values were produced at the next level
+        if (indexVarCase == ABOVE_LAST_FREE) {
           int step = resultStep.getStep() + 1;
           string resultTensorName = resultIterator.getTensor().as<Var>()->name;
-          string posArrName = resultTensorName + util::toString(step) +
-                              "_pos_arr";
+          string posArrName = resultTensorName + to_string(step) + "_pos_arr";
           Expr posArr = GetProperty::make(resultIterator.getTensor(),
                                           TensorProperty::Indices,
                                           step, 0, posArrName);
-
-          Expr producedVals =
-              Gt::make(Load::make(posArr, Add::make(resultPos,1)),
-                       Load::make(posArr, resultPos));
+          Expr producedVals = Gt::make(Load::make(posArr, Add::make(rpos,1)),
+                                       Load::make(posArr, rpos));
           posInc = IfThenElse::make(producedVals, posInc);
-        } else if (emitAssemble) {
-          // Emit code to resize idx (at result store loop nest)
-          resizeIndices = IfThenElse::make(doResize, resizeIndices);
-          posInc = Block::make({posInc, resizeIndices});
         }
         util::append(caseBody, {posInc});
       }
-      cases.push_back({caseExpr, Block::make(caseBody)});
-    }
-    loopBody.push_back(needsMerge(lpLattice)
-                       ? Case::make(cases, lpLattice.isFull())
-                       : cases[0].second);
 
-    // Emit code to conditionally increment sequential access ptr variables
+      auto caseIterators = removeIterator(idx, lq.getRangeIterators());
+      cases.push_back({allEqualTo(caseIterators,idx), Block::make(caseBody)});
+    }
+    loopBody.push_back(createIfStatements(cases, lpLattice));
+
+    // Emit code to increment sequential access `pos` variables. Variables that
+    // may not be consumed in an iteration (i.e. their iteration space is
+    // different from the loop iteration space) are guarded by a conditional:
     if (emitMerge) {
-      vector<Stmt> incs;
-      vector<Stmt> maybeIncs;
-      for (Iterator& iterator : lpIterators) {
-        Expr ptr = iterator.getIteratorVar();
-        Stmt inc = VarAssign::make(ptr, Add::make(ptr, 1));
+      // if (k == kB) B1_pos++;
+      // if (k == kc) c0_pos++;
+      for (auto& iterator : removeIterator(idx, lp.getRangeIterators())) {
+        Expr ivar = iterator.getIteratorVar();
+        Stmt inc = VarAssign::make(ivar, Add::make(ivar, 1));
         Expr tensorIdx = iterator.getIdxVar();
-        if (!iterator.isDense() && iterator.getIdxVar() != idx) {
-          maybeIncs.push_back(IfThenElse::make(Eq::make(tensorIdx, idx), inc));
-        }
-        else {
-          incs.push_back(inc);
-        }
+        loopBody.push_back(IfThenElse::make(Eq::make(tensorIdx, idx), inc));
       }
-      util::append(loopBody, maybeIncs);
-      util::append(loopBody, incs);
+
+      /// k++
+      auto idxIterator = getIterator(idx, lpIterators);
+      if (idxIterator.defined()) {
+        Expr ivar = idxIterator.getIteratorVar();
+        loopBody.push_back(VarAssign::make(ivar, Add::make(ivar, 1)));
+      }
     }
 
     // Emit loop (while loop for merges and for loop for non-merges)
     Stmt loop;
     if (emitMerge) {
-      // Loop until any index has been exchaused
-      vector<Expr> stepIterLqEnd;
-      for (auto& iter : lp.getRangeIterators()) {
-        stepIterLqEnd.push_back(Lt::make(iter.getIteratorVar(), iter.end()));
-      }
-      Expr untilAnyExhausted = conjunction(stepIterLqEnd);
-      loop = While::make(untilAnyExhausted, Block::make(loopBody));
+      loop = While::make(noneExhausted(lp.getRangeIterators()),
+                         Block::make(loopBody));
     }
     else {
-      bool parallel = ctx.schedule.getAncestors(indexVar).size() == 1 &&
-                      ctx.schedule.isFree(indexVar);
-      for (size_t i = 0; i < ctx.schedule.getResultTensorPath().getSize(); i++){
-        if (!ctx.iterators[resultPath.getStep(i)].isDense()) {
-          parallel = false;
-        }
-      }
-      Iterator iter = getIterator(lpIterators);
-      LoopKind loopKind = parallel ? LoopKind::Parallel : LoopKind::Serial;
+      Iterator iter = lp.getRangeIterators()[0];
       loop = For::make(iter.getIteratorVar(), iter.begin(), iter.end(), 1,
-                       Block::make(loopBody), loopKind);
+                       Block::make(loopBody), isParallelizable(indexVar, ctx)
+                                              ? LoopKind::Parallel
+                                              : LoopKind::Serial);
     }
     loops.push_back(loop);
   }
   util::append(code, loops);
 
-  // Emit a store of the  segment size to the result ptr index
-  // A.d2.ptr[A1_ptr + 1] = A2_ptr;
+  // Emit a store of the  segment size to the result pos index
+  // A2_pos_arr[A1_pos + 1] = A2_pos;
   if (emitAssemble && resultIterator.defined()) {
     Stmt posStore = resultIterator.storePtr();
     if (posStore.defined()) {
@@ -599,7 +560,7 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
     }
     if (emitCompute) {
       Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators, ctx.schedule,
-                                          map<TensorBase,ir::Expr>());
+                                          map<TensorBase,Expr>());
       Stmt compute = Store::make(vals, 0, expr);
       body.push_back(compute);
     }
