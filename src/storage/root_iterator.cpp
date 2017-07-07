@@ -25,8 +25,20 @@ bool RootIterator::isSequentialAccess() const {
   return true;
 }
 
+bool RootIterator::hasDuplicates() const {
+  return false;
+}
+
+RangeType RootIterator::getRangeType() const {
+  return RangeType::Multiple;
+}
+
 Expr RootIterator::getPtrVar() const {
   return 0;
+}
+
+Expr RootIterator::getEndVar() const {
+  return 1;
 }
 
 Expr RootIterator::getIdxVar() const {

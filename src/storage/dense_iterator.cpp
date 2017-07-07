@@ -16,6 +16,8 @@ DenseIterator::DenseIterator(std::string name, const Expr& tensor, int level,
   std::string indexVarName = name + util::toString(tensor);
   ptrVar = Var::make(util::toString(tensor) + std::to_string(level) + "_pos",
                      Type(Type::Int));
+  endVar = Var::make(util::toString(tensor) + std::to_string(level) + "_end",
+                     Type(Type::Int));
   idxVar = Var::make(indexVarName, Type(Type::Int));
 
   this->dimSize = (int)dimSize;
@@ -38,8 +40,20 @@ bool DenseIterator::isSequentialAccess() const {
   return false;
 }
 
+bool DenseIterator::hasDuplicates() const {
+  return false;
+}
+
+RangeType DenseIterator::getRangeType() const {
+  return RangeType::Multiple;
+}
+
 Expr DenseIterator::getPtrVar() const {
   return ptrVar;
+}
+
+Expr DenseIterator::getEndVar() const {
+  return endVar;
 }
 
 Expr DenseIterator::getIdxVar() const {

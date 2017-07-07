@@ -329,10 +329,17 @@ static vector<Stmt> lower(const Target&    target,
     auto randomAccessIterators =
         getRandomAccessIterators(util::combine(lpIterators, {resultIterator}));
     for (Iterator& iterator : randomAccessIterators) {
-      Expr val = ir::Add::make(ir::Mul::make(iterator.getParent().getPtrVar(),
-                                             iterator.end()), idx);
+      Expr val = Add::make(Mul::make(iterator.getParent().getPtrVar(),
+                                     iterator.end()), idx);
       Stmt initPos = VarAssign::make(iterator.getPtrVar(), val, true);
       loopBody.push_back(initPos);
+    }
+
+    // Emit code to initialize (pos_)end variables:
+    for (Iterator& iterator : lpIterators) {
+      Expr val = Add::make(iterator.getPtrVar(), 1);
+      Stmt initEnd = VarAssign::make(iterator.getEndVar(), val, true);
+      loopBody.push_back(initEnd);
     }
 
     // Emit one case per lattice point in the sub-lattice rooted at lp

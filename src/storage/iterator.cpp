@@ -71,7 +71,7 @@ bool Iterator::isDense() const {
 
 bool Iterator::isFixedRange() const {
   taco_iassert(defined());
-  return iterator->isFixedRange();
+  return getRangeType() != RangeType::Variable;
 }
 
 bool Iterator::isRandomAccess() const {
@@ -84,6 +84,16 @@ bool Iterator::isSequentialAccess() const {
   return iterator->isSequentialAccess();
 }
 
+bool Iterator::hasDuplicates() const {
+  taco_iassert(defined());
+  return iterator->hasDuplicates();
+}
+
+RangeType Iterator::getRangeType() const {
+  taco_iassert(defined());
+  return iterator->getRangeType();
+}
+
 ir::Expr Iterator::getTensor() const {
   taco_iassert(defined());
   return iterator->getTensor();
@@ -92,6 +102,11 @@ ir::Expr Iterator::getTensor() const {
 ir::Expr Iterator::getPtrVar() const {
   taco_iassert(defined());
   return iterator->getPtrVar();
+}
+
+ir::Expr Iterator::getEndVar() const {
+  taco_iassert(defined());
+  return iterator->getEndVar();
 }
 
 ir::Expr Iterator::getIdxVar() const {

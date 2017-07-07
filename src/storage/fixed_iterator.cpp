@@ -16,6 +16,8 @@ FixedIterator::FixedIterator(std::string name, const Expr& tensor, int level,
   std::string idxVarName = name + util::toString(tensor);
   ptrVar = Var::make(util::toString(tensor) + std::to_string(level) + "_ptr",
                      Type(Type::Int));
+  endVar = Var::make(util::toString(tensor) + std::to_string(level) + "_end",
+                     Type(Type::Int));
   idxVar = Var::make(idxVarName,Type(Type::Int));
 
   this->fixedSize = (int)fixedSize;
@@ -37,8 +39,20 @@ bool FixedIterator::isSequentialAccess() const {
   return true;
 }
 
+bool FixedIterator::hasDuplicates() const {
+  return false;
+}
+
+RangeType FixedIterator::getRangeType() const {
+  return RangeType::Multiple;
+}
+
 Expr FixedIterator::getPtrVar() const {
   return ptrVar;
+}
+
+Expr FixedIterator::getEndVar() const {
+  return endVar;
 }
 
 Expr FixedIterator::getIdxVar() const {

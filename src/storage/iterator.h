@@ -19,6 +19,12 @@ class Expr;
 namespace storage {
 class IteratorImpl;
 
+enum class RangeType {
+  Variable,
+  Multiple,
+  Single
+};
+
 /// A compile-time iterator over a tensor storage level. This class can be used
 /// to generate the IR expressions for iterating over different level types.
 class Iterator : public util::Comparable<Iterator> {
@@ -48,10 +54,16 @@ public:
   /// Returns true if the iterator supports sequential access
   bool isSequentialAccess() const;
 
+  bool hasDuplicates() const;
+
+  RangeType getRangeType() const;
+
   /// Returns the ptr variable for this iterator (e.g. `ja_ptr`). Ptr variables
   /// are used to index into the data at the next level (as well as the index
   /// arrays for formats such as sparse that have them).
   ir::Expr getPtrVar() const;
+
+  ir::Expr getEndVar() const;
 
   /// Returns the index variable for this iterator (e.g. `ja`). Index variables
   /// are merged together using `min` in the emitted code to produce the loop
@@ -110,12 +122,16 @@ public:
   const ir::Expr& getTensor() const;
 
   virtual bool isDense() const                           = 0;
-  virtual bool isFixedRange() const                      = 0;
 
   virtual bool isRandomAccess() const                    = 0;
   virtual bool isSequentialAccess() const                = 0;
 
+  virtual bool hasDuplicates() const                     = 0;
+
+  virtual RangeType getRangeType() const                 = 0;
+
   virtual ir::Expr getPtrVar() const                     = 0;
+  virtual ir::Expr getEndVar() const                     = 0;
   virtual ir::Expr getIdxVar() const                     = 0;
 
   virtual ir::Expr getIteratorVar() const                = 0;

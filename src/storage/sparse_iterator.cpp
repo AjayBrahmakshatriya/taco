@@ -17,6 +17,8 @@ SparseIterator::SparseIterator(std::string name, const Expr& tensor, int level,
   std::string idxVarName = name + util::toString(tensor);
   ptrVar = Var::make(util::toString(tensor) + std::to_string(level) + "_pos",
                      Type(Type::Int));
+  endVar = Var::make(util::toString(tensor) + std::to_string(level) + "_end",
+                     Type(Type::Int));
   idxVar = Var::make(idxVarName, Type(Type::Int));
 }
 
@@ -36,8 +38,20 @@ bool SparseIterator::isSequentialAccess() const {
   return true;
 }
 
+bool SparseIterator::hasDuplicates() const {
+  return false;
+}
+
+RangeType SparseIterator::getRangeType() const {
+  return RangeType::Variable;
+}
+
 Expr SparseIterator::getPtrVar() const {
   return ptrVar;
+}
+
+Expr SparseIterator::getEndVar() const {
+  return endVar;
 }
 
 Expr SparseIterator::getIdxVar() const {
@@ -53,7 +67,7 @@ Expr SparseIterator::begin() const {
 }
 
 Expr SparseIterator::end() const {
-  return Load::make(getPtrArr(), Add::make(getParent().getPtrVar(), 1));
+  return Load::make(getPtrArr(), getParent().getEndVar());
 }
 
 Stmt SparseIterator::initDerivedVars() const {

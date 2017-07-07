@@ -21,7 +21,12 @@ public:
   bool isRandomAccess() const;
   bool isSequentialAccess() const;
 
+  bool hasDuplicates() const;
+
+  RangeType getRangeType() const;
+
   ir::Expr getPtrVar() const;
+  ir::Expr getEndVar() const;
   ir::Expr getIdxVar() const;
 
   ir::Expr getIteratorVar() const;
@@ -42,6 +47,7 @@ private:
   int level;
 
   ir::Expr ptrVar;
+  ir::Expr endVar;
   ir::Expr idxVar;
 
   ir::Expr getPtrArr() const;
