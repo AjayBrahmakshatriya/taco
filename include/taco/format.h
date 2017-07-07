@@ -9,9 +9,12 @@
 namespace taco {
 
 enum DimensionType {
-  Dense,      // e.g. first  dimension in CSR
-  Sparse,     // e.g. second dimension in CSR
-  Fixed       // e.g. second dimension in ELL
+  Dense,        // e.g. first  dimension in CSR
+  Sparse,       // e.g. second dimension in CSR
+  Fixed,        // e.g. second dimension in ELL
+  Uncompressed,
+  Coordinate,
+  Unique
 };
 
 class Format {

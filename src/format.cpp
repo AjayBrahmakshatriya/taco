@@ -81,6 +81,18 @@ std::ostream& operator<<(std::ostream& os, const DimensionType& dimensionType) {
     case DimensionType::Fixed:
       os << "fixed";
       break;
+    case DimensionType::Uncompressed:
+      os << "uncompressed";
+      break;
+    case DimensionType::Coordinate:
+      os << "coordinate";
+      break;
+    case DimensionType::Unique:
+      os << "unique";
+      break;
+    default:
+      taco_not_supported_yet;
+      break;
   }
   return os;
 }

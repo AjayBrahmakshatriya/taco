@@ -76,7 +76,9 @@ void ASSERT_STORAGE_EQUALS(vector<vector<vector<int>>> expectedIndices,
   for (size_t i=0; i < storage.getFormat().getOrder(); ++i) {
     auto dimIndex = index.getDimensionIndex(i);
     switch (storage.getFormat().getDimensionTypes()[i]) {
-      case DimensionType::Dense: {
+      case DimensionType::Dense:
+      case DimensionType::Coordinate:
+      case DimensionType::Unique: {
         taco_iassert(expectedIndices[i].size() == 1);
         ASSERT_EQ(1u, dimIndex.numIndexArrays());
         auto size = dimIndex.getIndexArray(0);
@@ -85,7 +87,8 @@ void ASSERT_STORAGE_EQUALS(vector<vector<vector<int>>> expectedIndices,
         break;
       }
       case DimensionType::Sparse:
-      case DimensionType::Fixed: {
+      case DimensionType::Fixed:
+      case DimensionType::Uncompressed: {
         taco_iassert(expectedIndices[i].size() == 2);
         ASSERT_EQ(2u, dimIndex.numIndexArrays());
         auto pos = dimIndex.getIndexArray(0);

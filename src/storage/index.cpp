@@ -60,6 +60,9 @@ size_t Index::getSize() const {
       case DimensionType::Fixed:
         size *= getValue<size_t>(dimIndex.getIndexArray(0), 0);
         break;
+      default:
+        taco_not_supported_yet;
+        break;
     }
   }
   return size;

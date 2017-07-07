@@ -127,6 +127,11 @@ static void packTensor(const vector<int>& dims,
       }
       break;
     }
+    default:
+    {
+      taco_not_supported_yet;
+      break;
+    }
   }
 }
 
@@ -238,6 +243,10 @@ Storage pack(const std::vector<int>&              dimensions,
         indices[i][0].push_back(maxSize);
         break;
       }
+      default: {
+        taco_not_supported_yet;
+        break;
+      }
     }
   }
 
@@ -260,6 +269,10 @@ Storage pack(const std::vector<int>&              dimensions,
         Array pos = makeArray(indices[i][0]);
         Array idx = makeArray(indices[i][1]);
         dimIndices.push_back(DimensionIndex({pos, idx}));
+        break;
+      }
+      default: {
+        taco_not_supported_yet;
         break;
       }
     }
@@ -299,7 +312,8 @@ ir::Stmt packCode(const Format& format) {
       case Sparse: {
         break;
       }
-      case Fixed: {
+      case Fixed: 
+      default: {
         taco_not_supported_yet;
         break;
       }

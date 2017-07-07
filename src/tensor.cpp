@@ -427,9 +427,10 @@ static taco_tensor_t* packTensorData(const TensorBase& tensor) {
         const Array& idx = dimIndex.getIndexArray(1);
         tensorData->indices[i][0] = (uint8_t*)pos.getData();
         tensorData->indices[i][1] = (uint8_t*)idx.getData();
-      }
         break;
+      }
       case DimensionType::Fixed:
+      default:
         taco_not_supported_yet;
         break;
     }
@@ -466,6 +467,7 @@ static size_t unpackTensorData(const taco_tensor_t& tensorData,
         break;
       }
       case DimensionType::Fixed:
+      default:
         taco_not_supported_yet;
         break;
     }
