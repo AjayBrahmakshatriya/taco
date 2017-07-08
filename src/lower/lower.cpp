@@ -340,6 +340,19 @@ static vector<Stmt> lower(const Target&    target,
       Expr val = Add::make(iterator.getPtrVar(), 1);
       Stmt initEnd = VarAssign::make(iterator.getEndVar(), val, true);
       loopBody.push_back(initEnd);
+      if (iterator.hasDuplicates()) {
+        Expr tensorIdx = iterator.getIdxVar();
+        Expr endVar = iterator.getEndVar();
+        Expr reachedEnd = Lt::make(endVar, iterator.end());
+        Expr isDuplicate = Eq::make(iterator.getIdx(endVar), idx);
+        Expr doAdvance = And::make(reachedEnd, isDuplicate);
+        Stmt incEnd = VarAssign::make(endVar, Add::make(endVar, 1));
+        Stmt ffLoop = While::make(doAdvance, incEnd);
+        if (tensorIdx != idx) {
+          ffLoop = IfThenElse::make(Eq::make(tensorIdx, idx), ffLoop);
+        }
+        loopBody.push_back(ffLoop);
+      }
     }
 
     // Emit one case per lattice point in the sub-lattice rooted at lp
@@ -447,12 +460,12 @@ static vector<Stmt> lower(const Target&    target,
     // Emit code to increment sequential access `pos` variables. Variables that
     // may not be consumed in an iteration (i.e. their iteration space is
     // different from the loop iteration space) are guarded by a conditional:
-    if (emitMerge) {
+    if (emitMerge || lp.getRangeIterators()[0].hasDuplicates()) {
       // if (k == kB) B1_pos++;
       // if (k == kc) c0_pos++;
       for (auto& iterator : removeIterator(idx, lp.getRangeIterators())) {
         Expr ivar = iterator.getIteratorVar();
-        Stmt inc = VarAssign::make(ivar, Add::make(ivar, 1));
+        Stmt inc = VarAssign::make(ivar, iterator.getEndVar());
         Expr tensorIdx = iterator.getIdxVar();
         loopBody.push_back(IfThenElse::make(Eq::make(tensorIdx, idx), inc));
       }
@@ -461,13 +474,13 @@ static vector<Stmt> lower(const Target&    target,
       auto idxIterator = getIterator(idx, lpIterators);
       if (idxIterator.defined()) {
         Expr ivar = idxIterator.getIteratorVar();
-        loopBody.push_back(VarAssign::make(ivar, Add::make(ivar, 1)));
+        loopBody.push_back(VarAssign::make(ivar, idxIterator.getEndVar()));
       }
     }
 
     // Emit loop (while loop for merges and for loop for non-merges)
     Stmt loop;
-    if (emitMerge) {
+    if (emitMerge || lp.getRangeIterators()[0].hasDuplicates()) {
       loop = While::make(noneExhausted(lp.getRangeIterators()),
                          Block::make(loopBody));
     }

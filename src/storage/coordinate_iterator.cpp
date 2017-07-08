@@ -70,6 +70,10 @@ Expr CoordinateIterator::end() const {
   return getParent().getEndVar();
 }
 
+Expr CoordinateIterator::getIdx(ir::Expr pos) const {
+  return Load::make(getIdxArr(), pos);
+}
+
 Stmt CoordinateIterator::initDerivedVars() const {
   return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
                          true);

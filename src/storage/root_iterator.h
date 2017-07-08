@@ -30,6 +30,8 @@ public:
   ir::Expr begin() const;
   ir::Expr end() const;
 
+  ir::Expr getIdx(ir::Expr pos) const;
+
   ir::Stmt initDerivedVars() const;
 
   ir::Stmt storePtr() const;

@@ -71,6 +71,10 @@ Expr FixedIterator::end() const {
   return fixedSize;
 }
 
+Expr FixedIterator::getIdx(ir::Expr pos) const {
+  return Load::make(getIdxArr(), pos);
+}
+
 Stmt FixedIterator::initDerivedVars() const {
   Expr ptrVal = Add::make(Mul::make(getParent().getPtrVar(), end()),
                           getIdxVar());

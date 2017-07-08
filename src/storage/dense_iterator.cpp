@@ -75,6 +75,10 @@ Expr DenseIterator::end() const {
   return getSizeArr();
 }
 
+Expr DenseIterator::getIdx(Expr pos) const {
+  return Expr();
+}
+
 Stmt DenseIterator::initDerivedVars() const {
   Expr ptrVal = Add::make(Mul::make(getParent().getPtrVar(), end()),
                           getIdxVar());

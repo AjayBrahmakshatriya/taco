@@ -61,6 +61,10 @@ Expr RootIterator::end() const {
   return 1;
 }
 
+Expr RootIterator::getIdx(ir::Expr pos) const {
+  return Expr();
+}
+
 ir::Stmt RootIterator::initDerivedVars() const {
   return Stmt();
 }

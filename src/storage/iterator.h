@@ -82,6 +82,8 @@ public:
   /// in the loop and that determines the end of the iterator.
   ir::Expr end() const;
 
+  ir::Expr getIdx(ir::Expr pos) const;
+
   /// Returns a statement that initializes loop variables that are derived from
   /// the iterator variable.
   ir::Stmt initDerivedVar() const;
@@ -137,6 +139,8 @@ public:
   virtual ir::Expr getIteratorVar() const                = 0;
   virtual ir::Expr begin() const                         = 0;
   virtual ir::Expr end() const                           = 0;
+
+  virtual ir::Expr getIdx(ir::Expr pos) const            = 0;
 
   virtual ir::Stmt initDerivedVars() const               = 0;
 

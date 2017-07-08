@@ -70,6 +70,10 @@ Expr UncompressedIterator::end() const {
   return Load::make(getPtrArr(), getParent().getEndVar());
 }
 
+Expr UncompressedIterator::getIdx(ir::Expr pos) const {
+  return Load::make(getIdxArr(), pos);
+}
+
 Stmt UncompressedIterator::initDerivedVars() const {
   return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
                          true);

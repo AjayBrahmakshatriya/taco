@@ -4,6 +4,9 @@
 #include "dense_iterator.h"
 #include "sparse_iterator.h"
 #include "fixed_iterator.h"
+#include "uncompressed_iterator.h"
+#include "coordinate_iterator.h"
+#include "unique_iterator.h"
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -52,6 +55,21 @@ Iterator Iterator::make(string name, const ir::Expr& tensorVar,
       iterator.iterator =
           std::make_shared<FixedIterator>(name, tensorVar, dim, fixedSize,
                                           parent);
+      break;
+    }
+    case DimensionType::Uncompressed: {
+      iterator.iterator =
+          std::make_shared<UncompressedIterator>(name, tensorVar, dim, parent);
+      break;
+    }
+    case DimensionType::Coordinate: {
+      iterator.iterator =
+          std::make_shared<CoordinateIterator>(name, tensorVar, dim, parent);
+      break;
+    }
+    case DimensionType::Unique: {
+      iterator.iterator =
+          std::make_shared<UniqueIterator>(name, tensorVar, dim, parent);
       break;
     }
   }
@@ -127,6 +145,11 @@ ir::Expr Iterator::begin() const {
 ir::Expr Iterator::end() const {
   taco_iassert(defined());
   return iterator->end();
+}
+
+ir::Expr Iterator::getIdx(ir::Expr pos) const {
+  taco_iassert(defined());
+  return iterator->getIdx(pos);
 }
 
 ir::Stmt Iterator::initDerivedVar() const {

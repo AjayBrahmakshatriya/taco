@@ -70,6 +70,10 @@ Expr UniqueIterator::end() const {
   return getParent().getEndVar();
 }
 
+Expr UniqueIterator::getIdx(ir::Expr pos) const {
+  return Load::make(getIdxArr(), pos);
+}
+
 Stmt UniqueIterator::initDerivedVars() const {
   return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
                          true);

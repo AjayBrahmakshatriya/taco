@@ -240,6 +240,15 @@ int main(int argc, char* argv[]) {
           case 's':
             levelTypes.push_back(DimensionType::Sparse);
             break;
+          case 'u':
+            levelTypes.push_back(DimensionType::Uncompressed);
+            break;
+          case 'c':
+            levelTypes.push_back(DimensionType::Coordinate);
+            break;
+          case 'q':
+            levelTypes.push_back(DimensionType::Unique);
+            break;
           default:
             return reportError("Incorrect format descriptor", 3);
             break;
