@@ -123,39 +123,39 @@ static bool needsZero(const Context& ctx) {
 }
 
 static IndexExpr emitAvailableExprs(const IndexVar& indexVar,
-                                    const IndexExpr& indexExpr, Context* ctx,
-                                    vector<Stmt>* stmts) {
-  vector<IndexVar>  visited    = ctx->schedule.getAncestors(indexVar);
+                                    const IndexExpr& indexExpr, Context& ctx,
+                                    vector<Stmt>& stmts) {
+  vector<IndexVar>  visited    = ctx.schedule.getAncestors(indexVar);
   vector<IndexExpr> availExprs = getAvailableExpressions(indexExpr, visited);
   map<IndexExpr,IndexExpr> substitutions;
   for (const IndexExpr& availExpr : availExprs) {
     TensorBase t("t" + indexVar.getName(), Float(64));
     substitutions.insert({availExpr, taco::Access(t)});
     Expr tensorVar = Var::make(t.getName(), Float(64));
-    ctx->temporaries.insert({t, tensorVar});
-    Expr expr = lowerToScalarExpression(availExpr, ctx->iterators,
-                                        ctx->schedule, ctx->temporaries);
-    stmts->push_back(VarAssign::make(tensorVar, expr, true));
+    ctx.temporaries.insert({t, tensorVar});
+    Expr expr = lowerToScalarExpression(availExpr, ctx.iterators,
+                                        ctx.schedule, ctx.temporaries, stmts);
+    stmts.push_back(VarAssign::make(tensorVar, expr, true));
   }
   return replace(indexExpr, substitutions);
 }
 
 static void emitComputeExpr(const Target& target, const IndexVar& indexVar,
                             const IndexExpr& indexExpr, const Context& ctx,
-                            vector<Stmt>* stmts) {
+                            vector<Stmt>& stmts) {
   Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators,
-                                      ctx.schedule, ctx.temporaries);
+                                      ctx.schedule, ctx.temporaries, stmts);
   if (target.pos.defined()) {
     Stmt store = ctx.schedule.hasReductionVariableAncestor(indexVar)
         ? compoundStore(target.tensor, target.pos, expr)
         :   Store::make(target.tensor, target.pos, expr);
-    stmts->push_back(store);
+    stmts.push_back(store);
   }
   else {
     Stmt assign = ctx.schedule.hasReductionVariableAncestor(indexVar)
         ?  compoundAssign(target.tensor, expr)
         : VarAssign::make(target.tensor, expr);
-    stmts->push_back(assign);
+    stmts.push_back(assign);
   }
 }
 
@@ -364,7 +364,7 @@ static vector<Stmt> lower(const Target&    target,
 
       // Emit available sub-expressions at this loop level
       if (emitCompute && ABOVE_LAST_FREE == indexVarCase) {
-        lqExpr = emitAvailableExprs(indexVar, lqExpr, &ctx, &caseBody);
+        lqExpr = emitAvailableExprs(indexVar, lqExpr, ctx, caseBody);
       }
 
       // Recursive call to emit iteration schedule children
@@ -398,7 +398,7 @@ static vector<Stmt> lower(const Target&    target,
       // Emit code to compute and store/assign result 
       if (emitCompute &&
           (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
-        emitComputeExpr(target, indexVar, lqExpr, ctx, &caseBody);
+        emitComputeExpr(target, indexVar, lqExpr, ctx, caseBody);
       }
 
       // Emit a store of the index variable value to the result idx index array
@@ -485,6 +485,9 @@ static vector<Stmt> lower(const Target&    target,
       loop = For::make(iter.getIteratorVar(), iter.begin(), iter.end(), 1,
                        Block::make(loopBody), 
                        doParallelize(indexVar, iter.getTensor(), ctx));
+      
+      // pos variable is initialized in the for loop, so don't need to 
+      // initialize it beforehand
       code.clear();
     }
     loops.push_back(loop);
@@ -653,7 +656,7 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
     }
     if (emitCompute) {
       Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators, ctx.schedule,
-                                          map<TensorBase,Expr>());
+                                          map<TensorBase,Expr>(), body);
       Stmt compute = Store::make(vals, 0, expr);
       body.push_back(compute);
     }

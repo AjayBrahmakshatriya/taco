@@ -31,7 +31,8 @@ ir::Expr
 lowerToScalarExpression(const IndexExpr& indexExpr,
                         const Iterators& iterators,
                         const IterationSchedule& schedule,
-                        const std::map<TensorBase,ir::Expr>& temporaries);
+                        const std::map<TensorBase,ir::Expr>& temporaries,
+                        std::vector<ir::Stmt>& reduceDuplicates);
 
 /// Emit code to merge several tensor path index variables (using a min)
 ir::Stmt mergePathIndexVars(ir::Expr var, std::vector<ir::Expr> pathVars);

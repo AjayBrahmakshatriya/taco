@@ -49,21 +49,27 @@ getTensorVars(const TensorBase& tensor) {
 ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
                                  const Iterators& iterators,
                                  const IterationSchedule& schedule,
-                                 const map<TensorBase,ir::Expr>& temporaries) {
+                                 const map<TensorBase,ir::Expr>& temporaries,
+                                 std::vector<ir::Stmt>& reduceDuplicates) {
 
   class ScalarCode : public expr_nodes::ExprVisitorStrict {
     using expr_nodes::ExprVisitorStrict::visit;
 
-  public:
     const Iterators& iterators;
     const IterationSchedule& schedule;
-    const map<TensorBase,ir::Expr>& temporaries;
-    ScalarCode(const Iterators& iterators,
-                 const IterationSchedule& schedule,
-                 const map<TensorBase,ir::Expr>& temporaries)
-        : iterators(iterators), schedule(schedule), temporaries(temporaries) {}
+    const std::map<TensorBase,ir::Expr>& temporaries;
+    std::vector<ir::Stmt>& reduceDuplicates;
 
     ir::Expr expr;
+
+  public:
+    ScalarCode(const Iterators& iterators,
+               const IterationSchedule& schedule,
+               const map<TensorBase,ir::Expr>& temporaries,
+               std::vector<ir::Stmt>& reduceDuplicates)
+        : iterators(iterators), schedule(schedule), 
+          temporaries(temporaries), reduceDuplicates(reduceDuplicates) {}
+
     ir::Expr lower(const IndexExpr& indexExpr) {
       indexExpr.accept(this);
       auto e = expr;
@@ -76,6 +82,7 @@ ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
         expr = temporaries.at(op->tensor);
         return;
       }
+
       TensorPath path = schedule.getTensorPath(op);
       storage::Iterator iterator = (op->tensor.getOrder() == 0)
           ? iterators.getRoot(path)
@@ -83,8 +90,24 @@ ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
       ir::Expr ptr = iterator.getPtrVar();
       ir::Expr values = GetProperty::make(iterator.getTensor(),
                                           TensorProperty::Values);
-      ir::Expr loadValue = Load::make(values, ptr);
-      expr = loadValue;
+      if (iterator.hasDuplicates()) {
+        const std::string name = ptr.as<Var>()->name + "_val";
+        ir::Expr val = Var::make(name, Float(64));
+        ir::Stmt initVal = VarAssign::make(val, 0.0, true);
+        reduceDuplicates.push_back(initVal);
+
+        ir::Expr end = iterator.getEndVar();
+        ir::Expr reduceIter = Var::make(name + "_it", Type::Int);
+        ir::Expr loadVal = Load::make(values, reduceIter);
+        ir::Stmt reduceVal = VarAssign::make(val, Add::make(val, loadVal));
+        ir::Stmt reduceLoop = For::make(reduceIter, ptr, end, 1, reduceVal);
+        reduceDuplicates.push_back(reduceLoop);
+
+        expr = val;
+      } else {
+        ir::Expr loadValue = Load::make(values, ptr);
+        expr = loadValue;
+      }
     }
 
     void visit(const NegNode* op) {
@@ -123,7 +146,7 @@ ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
       expr = ir::Expr(op->val);
     }
   };
-  return ScalarCode(iterators,schedule,temporaries).lower(indexExpr);
+  return ScalarCode(iterators,schedule,temporaries,reduceDuplicates).lower(indexExpr);
 }
 
 ir::Stmt mergePathIndexVars(ir::Expr var, vector<ir::Expr> pathVars){
