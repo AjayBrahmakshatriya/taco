@@ -291,12 +291,10 @@ static vector<Stmt> lower(const Target&    target,
 
   // Emit code to initialize pos variables:
   // B2_pos = B2_pos_arr[B1_pos];
-  if (emitMerge) {
-    for (auto& iterator : lattice.getIterators()) {
-      Expr iteratorVar = iterator.getIteratorVar();
-      Stmt iteratorInit = VarAssign::make(iteratorVar, iterator.begin(), true);
-      code.push_back(iteratorInit);
-    }
+  for (auto& iterator : lattice.getIterators()) {
+    Expr iteratorVar = iterator.getIteratorVar();
+    Stmt iteratorInit = VarAssign::make(iteratorVar, iterator.begin(), true);
+    code.push_back(iteratorInit);
   }
 
   // Emit one loop per lattice point lp
@@ -457,10 +455,13 @@ static vector<Stmt> lower(const Target&    target,
     }
     loopBody.push_back(createIfStatements(cases, lpLattice));
 
-    // Emit code to increment sequential access `pos` variables. Variables that
-    // may not be consumed in an iteration (i.e. their iteration space is
-    // different from the loop iteration space) are guarded by a conditional:
-    if (emitMerge || lp.getRangeIterators()[0].hasDuplicates()) {
+    Stmt loop;
+    // Emit loop (while loop for merges and for loop for non-merges)
+    if (emitMerge || lp.getRangeIterators().front().hasDuplicates()) {
+      // Emit code to increment sequential access `pos` variables. Variables 
+      // that may not be consumed in an iteration (i.e. their iteration space is
+      // different from the loop iteration space) are guarded by a conditional:
+
       // if (k == kB) B1_pos++;
       // if (k == kc) c0_pos++;
       for (auto& iterator : removeIterator(idx, lp.getRangeIterators())) {
@@ -476,19 +477,15 @@ static vector<Stmt> lower(const Target&    target,
         Expr ivar = idxIterator.getIteratorVar();
         loopBody.push_back(VarAssign::make(ivar, idxIterator.getEndVar()));
       }
-    }
-
-    // Emit loop (while loop for merges and for loop for non-merges)
-    Stmt loop;
-    if (emitMerge || lp.getRangeIterators()[0].hasDuplicates()) {
+      
       loop = While::make(noneExhausted(lp.getRangeIterators()),
                          Block::make(loopBody));
-    }
-    else {
-      Iterator iter = lp.getRangeIterators()[0];
+    } else {
+      Iterator iter = lp.getRangeIterators().front();
       loop = For::make(iter.getIteratorVar(), iter.begin(), iter.end(), 1,
                        Block::make(loopBody), 
                        doParallelize(indexVar, iter.getTensor(), ctx));
+      code.clear();
     }
     loops.push_back(loop);
   }
