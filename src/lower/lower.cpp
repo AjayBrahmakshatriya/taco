@@ -524,37 +524,41 @@ static vector<Stmt> lower(const Target&    target,
         if (indexVarCase == ABOVE_LAST_FREE) {
           auto resultNextStep = resultPath.getStep(resultStep.getStep() + 1);
           auto resultNextIterator = ctx.iterators[resultNextStep];
-          auto nextIteratorVar = resultNextIterator.getIteratorVar();
-          auto nextIteratorName = nextIteratorVar.as<Var>()->name;
 
-          const std::string insertedName = nextIteratorName + "_inserted";
-          Expr resultInsertedVar = Var::make(insertedName, Type(Type::Int));
+          if (emitAssemble || resultNextIterator.isRandomAccess()) {
+            auto nextIteratorVar = resultNextIterator.getIteratorVar();
+            auto nextIteratorName = nextIteratorVar.as<Var>()->name;
 
-          Expr nextIteratorPos = resultNextIterator.getPtrVar();
-          Expr inserted = resultStartVar.defined() ? 
-                          Sub::make(nextIteratorPos, resultStartVar) : 
-                          resultNextIterator.getRangeSize();
-          taco_iassert(inserted.defined() && 
-                       (!isa<Literal>(inserted) || inserted.as<Literal>() > 0));
+            const std::string insertedName = nextIteratorName + "_inserted";
+            Expr resultInsertedVar = Var::make(insertedName, Type(Type::Int));
 
-          Stmt initResultInserted = VarAssign::make(resultInsertedVar, 
-                                                    inserted, true);
-          caseBody.push_back(initResultInserted);
+            Expr nextIteratorPos = resultNextIterator.getPtrVar();
+            Expr inserted = resultStartVar.defined() ? 
+                            Sub::make(nextIteratorPos, resultStartVar) : 
+                            resultNextIterator.getRangeSize();
+            taco_iassert(inserted.defined() && 
+                         (!isa<Literal>(inserted) || inserted.as<Literal>() > 0));
 
-          if (resultIterator.hasDuplicates() && 
-              resultNextIterator.isFixedRange() && 
-              !resultNextIterator.isRandomAccess()) {
-            Expr itVar = Var::make("it", Type(Type::Int));
-            posInc = For::make(itVar, 0, resultInsertedVar, 
-                               resultNextIterator.getRangeSize(), posInc);
+            Stmt initResultInserted = VarAssign::make(resultInsertedVar, 
+                                                      inserted, true);
+            caseBody.push_back(initResultInserted);
+
+            if (resultIterator.hasDuplicates() && 
+                resultNextIterator.isFixedRange() && 
+                !resultNextIterator.isRandomAccess()) {
+              Expr itVar = Var::make("it", Type(Type::Int));
+              posInc = For::make(itVar, 0, resultInsertedVar, 
+                                 resultNextIterator.getRangeSize(), posInc);
+            }
+
+            if (!isa<Literal>(inserted)) { 
+              posInc = IfThenElse::make(Gt::make(resultInsertedVar, 0), posInc);
+            }
+            caseBody.push_back(posInc);
           }
-
-          if (!isa<Literal>(inserted)) { 
-            posInc = IfThenElse::make(Gt::make(resultInsertedVar, 0), posInc);
-          }
+        } else {
+          caseBody.push_back(posInc);
         }
-        
-        caseBody.push_back(posInc);
       }
 
       auto caseIterators = removeIterator(idx, lq.getRangeIterators());
