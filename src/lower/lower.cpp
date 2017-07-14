@@ -661,16 +661,10 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
     Stmt prevIteratorInit;
     for (auto& indexVar : resultPath.getVariables()) {
       Iterator iter = ctx.iterators[resultPath.getStep(indexVar)];
-      Stmt iteratorInit = VarAssign::make(iter.getPtrVar(), iter.begin(), true);
       if (iter.isSequentialAccess()) {
         // Emit code to initialize the result pos variable
-        if (prevIteratorInit.defined()) {
-          body.push_back(prevIteratorInit);
-          prevIteratorInit = Stmt();
-        }
+        Stmt iteratorInit = VarAssign::make(iter.getPtrVar(), 0, true);
         body.push_back(iteratorInit);
-      } else {
-        prevIteratorInit = iteratorInit;
       }
     }
   }
