@@ -44,8 +44,11 @@ bool DenseIterator::hasDuplicates() const {
   return false;
 }
 
-RangeType DenseIterator::getRangeType() const {
-  return RangeType::Multiple;
+Expr DenseIterator::getRangeSize() const {
+  if (isa<Literal>(dimSize) && to<Literal>(dimSize)->value <= 16) {
+    return dimSize;
+  }
+  return getSizeArr();
 }
 
 Expr DenseIterator::getPtrVar() const {
@@ -69,10 +72,7 @@ Expr DenseIterator::begin() const {
 }
 
 Expr DenseIterator::end() const {
-  if (isa<Literal>(dimSize) && to<Literal>(dimSize)->value <= 16) {
-    return dimSize;
-  }
-  return getSizeArr();
+  return getRangeSize();
 }
 
 Expr DenseIterator::getIdx(Expr pos) const {
@@ -85,7 +85,7 @@ Stmt DenseIterator::initDerivedVars() const {
   return VarAssign::make(getPtrVar(), ptrVal);
 }
 
-ir::Stmt DenseIterator::storePtr() const {
+ir::Stmt DenseIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   return Stmt();
 }
 
@@ -94,14 +94,6 @@ ir::Stmt DenseIterator::storeIdx(ir::Expr idx) const {
 }
 
 ir::Stmt DenseIterator::initStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt DenseIterator::resizePtrStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt DenseIterator::resizeIdxStorage(ir::Expr size) const {
   return Stmt();
 }
 

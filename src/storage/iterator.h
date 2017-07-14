@@ -19,12 +19,6 @@ class Expr;
 namespace storage {
 class IteratorImpl;
 
-enum class RangeType {
-  Variable,
-  Multiple,
-  Single
-};
-
 /// A compile-time iterator over a tensor storage level. This class can be used
 /// to generate the IR expressions for iterating over different level types.
 class Iterator : public util::Comparable<Iterator> {
@@ -56,7 +50,7 @@ public:
 
   bool hasDuplicates() const;
 
-  RangeType getRangeType() const;
+  ir::Expr getRangeSize() const;
 
   /// Returns the ptr variable for this iterator (e.g. `ja_ptr`). Ptr variables
   /// are used to index into the data at the next level (as well as the index
@@ -89,16 +83,12 @@ public:
   ir::Stmt initDerivedVar() const;
 
   /// Returns a statement that stores the ptr variable to the ptr index array.
-  ir::Stmt storePtr() const;
+  ir::Stmt storePtr(ir::Expr ptr, ir::Expr start) const;
 
   /// Returns a statement that stores `idx` to the idx index array.
   ir::Stmt storeIdx(ir::Expr idx) const;
 
   ir::Stmt initStorage(ir::Expr size) const;
-
-  ir::Stmt resizePtrStorage(ir::Expr size) const;
-
-  ir::Stmt resizeIdxStorage(ir::Expr size) const;
 
   /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;
@@ -123,33 +113,31 @@ public:
   const Iterator& getParent() const;
   const ir::Expr& getTensor() const;
 
-  virtual bool isDense() const                           = 0;
+  virtual bool isDense() const                                  = 0;
 
-  virtual bool isRandomAccess() const                    = 0;
-  virtual bool isSequentialAccess() const                = 0;
+  virtual bool isRandomAccess() const                           = 0;
+  virtual bool isSequentialAccess() const                       = 0;
 
-  virtual bool hasDuplicates() const                     = 0;
+  virtual bool hasDuplicates() const                            = 0;
 
-  virtual RangeType getRangeType() const                 = 0;
+  virtual ir::Expr getRangeSize() const                         = 0;
 
-  virtual ir::Expr getPtrVar() const                     = 0;
-  virtual ir::Expr getEndVar() const                     = 0;
-  virtual ir::Expr getIdxVar() const                     = 0;
+  virtual ir::Expr getPtrVar() const                            = 0;
+  virtual ir::Expr getEndVar() const                            = 0;
+  virtual ir::Expr getIdxVar() const                            = 0;
 
-  virtual ir::Expr getIteratorVar() const                = 0;
-  virtual ir::Expr begin() const                         = 0;
-  virtual ir::Expr end() const                           = 0;
+  virtual ir::Expr getIteratorVar() const                       = 0;
+  virtual ir::Expr begin() const                                = 0;
+  virtual ir::Expr end() const                                  = 0;
 
-  virtual ir::Expr getIdx(ir::Expr pos) const            = 0;
+  virtual ir::Expr getIdx(ir::Expr pos) const                   = 0;
 
-  virtual ir::Stmt initDerivedVars() const               = 0;
+  virtual ir::Stmt initDerivedVars() const                      = 0;
 
-  virtual ir::Stmt storeIdx(ir::Expr idx) const          = 0;
-  virtual ir::Stmt storePtr() const                      = 0;
+  virtual ir::Stmt storePtr(ir::Expr ptr, ir::Expr start) const = 0;
+  virtual ir::Stmt storeIdx(ir::Expr idx) const                 = 0;
 
-  virtual ir::Stmt initStorage(ir::Expr size) const      = 0;
-  virtual ir::Stmt resizePtrStorage(ir::Expr size) const = 0;
-  virtual ir::Stmt resizeIdxStorage(ir::Expr size) const = 0;
+  virtual ir::Stmt initStorage(ir::Expr size) const             = 0;
 
 private:
   Iterator parent;

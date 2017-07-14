@@ -14,12 +14,14 @@ UncompressedIterator::UncompressedIterator(std::string name, const Expr& tensor,
   this->tensor = tensor;
   this->level = level;
 
-  std::string idxVarName = name + util::toString(tensor);
-  ptrVar = Var::make(util::toString(tensor) + std::to_string(level) + "_pos",
-                     Type(Type::Int));
-  endVar = Var::make(util::toString(tensor) + std::to_string(level) + "_end",
-                     Type(Type::Int));
-  idxVar = Var::make(idxVarName, Type(Type::Int));
+  const std::string prefix = util::toString(tensor) + std::to_string(level);
+  ptrVar = Var::make(prefix + "_pos", Type(Type::Int));
+  endVar = Var::make(prefix + "_end", Type(Type::Int));
+  
+  idxVar = Var::make(name + util::toString(tensor), Type(Type::Int));
+
+  posCapacityVar = Var::make(prefix + "_pos_capacity", Type(Type::Int));
+  idxCapacityVar = Var::make(prefix + "_idx_capacity", Type(Type::Int));
 }
 
 bool UncompressedIterator::isDense() const {
@@ -42,8 +44,8 @@ bool UncompressedIterator::hasDuplicates() const {
   return true;
 }
 
-RangeType UncompressedIterator::getRangeType() const {
-  return RangeType::Variable;
+Expr UncompressedIterator::getRangeSize() const {
+  return Expr();
 }
 
 Expr UncompressedIterator::getPtrVar() const {
@@ -79,13 +81,54 @@ Stmt UncompressedIterator::initDerivedVars() const {
                          true);
 }
 
-ir::Stmt UncompressedIterator::storePtr() const {
-  return Store::make(getPtrArr(),
-                     Add::make(getParent().getPtrVar(), 1), getPtrVar());
+ir::Stmt UncompressedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
+  Expr parentPos = getParent().getPtrVar();
+  Stmt storePos = Store::make(getPtrArr(), Add::make(parentPos, 1), ptr);
+
+  if (level == 0) {
+    return storePos;
+  }
+
+  Expr shouldResize = Lte::make(getPosCapacity(), Add::make(parentPos, 1));
+  Expr newCapacity = Mul::make(2, Add::make(parentPos, 1));
+  Stmt updateCapacity = VarAssign::make(getPosCapacity(), newCapacity);
+  Stmt resizePos = Allocate::make(getPtrArr(), getPosCapacity(), true);
+  Stmt body = Block::make({updateCapacity, resizePos});
+  Stmt maybeResizePos = IfThenElse::make(shouldResize, body);
+
+  return Block::make({maybeResizePos, storePos});
 }
 
 ir::Stmt UncompressedIterator::storeIdx(ir::Expr idx) const {
-  return Store::make(getIdxArr(), getPtrVar(), idx);
+  Stmt storeIdx = Store::make(getIdxArr(), getPtrVar(), idx);
+
+  Expr shouldResize = Lte::make(getIdxCapacity(), getPtrVar());
+  Expr newCapacity = Mul::make(2, getPtrVar());
+  Stmt updateCapacity = VarAssign::make(getIdxCapacity(), newCapacity);
+  Stmt resizeIdx = Allocate::make(getIdxArr(), getIdxCapacity(), true);
+  Stmt body = Block::make({updateCapacity, resizeIdx});
+  Stmt maybeResizeIdx = IfThenElse::make(shouldResize, body);
+
+  return Block::make({maybeResizeIdx, storeIdx});
+}
+
+ir::Stmt UncompressedIterator::initStorage(ir::Expr size) const {
+  Stmt initPosCapacity = VarAssign::make(getPosCapacity(), size, true);
+  Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
+  Stmt allocPosArr = Allocate::make(getPtrArr(), getPosCapacity());
+  Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
+  Stmt initPosArr = Store::make(getPtrArr(), 0, 0);
+
+  return Block::make({initPosCapacity, initIdxCapacity, allocPosArr, 
+                      allocIdxArr, initPosArr});
+}
+
+ir::Expr UncompressedIterator::getPosCapacity() const {
+  return posCapacityVar;
+}
+
+ir::Expr UncompressedIterator::getIdxCapacity() const {
+  return idxCapacityVar;
 }
 
 ir::Expr UncompressedIterator::getPtrArr() const {
@@ -97,20 +140,6 @@ ir::Expr UncompressedIterator::getPtrArr() const {
 ir::Expr UncompressedIterator::getIdxArr() const {
   string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
   return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
-}
-
-ir::Stmt UncompressedIterator::initStorage(ir::Expr size) const {
-  return Block::make({Allocate::make(getPtrArr(), size),
-                      Allocate::make(getIdxArr(), size),
-                      Store::make(getPtrArr(), 0, 0)});
-}
-
-ir::Stmt UncompressedIterator::resizePtrStorage(ir::Expr size) const {
-  return Allocate::make(getPtrArr(), size, true);
-}
-
-ir::Stmt UncompressedIterator::resizeIdxStorage(ir::Expr size) const {
-  return Allocate::make(getIdxArr(), size, true);
 }
 
 }}

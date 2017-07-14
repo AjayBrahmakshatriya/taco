@@ -100,6 +100,9 @@ ir::Expr simplify(const ir::Expr& expr) {
 }
 
 ir::Stmt simplify(const ir::Stmt& stmt) {
+  // TODO: Re-enable after pos_start bug is fixed
+  return stmt;
+
   // Perform copy propagation on variables that are added to a product of zero
   // and never re-assign, e.g. `int B1_pos = (0 * 42) + iB;`. These occur when
   // emitting code for top levels that are dense.

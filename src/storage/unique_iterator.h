@@ -23,7 +23,7 @@ public:
 
   bool hasDuplicates() const;
 
-  RangeType getRangeType() const;
+  ir::Expr getRangeSize() const;
 
   ir::Expr getPtrVar() const;
   ir::Expr getEndVar() const;
@@ -37,21 +37,22 @@ public:
 
   ir::Stmt initDerivedVars() const;
 
-  ir::Stmt storePtr() const;
+  ir::Stmt storePtr(ir::Expr ptr, ir::Expr start) const;
   ir::Stmt storeIdx(ir::Expr idx) const;
 
   ir::Stmt initStorage(ir::Expr size) const;
-  ir::Stmt resizePtrStorage(ir::Expr size) const;
-  ir::Stmt resizeIdxStorage(ir::Expr size) const;
 
 private:
   ir::Expr tensor;
   int level;
 
+  ir::Expr idxCapacityVar;
+
   ir::Expr ptrVar;
   ir::Expr endVar;
   ir::Expr idxVar;
 
+  ir::Expr getIdxCapacity() const;
   ir::Expr getIdxArr() const;
 };
 

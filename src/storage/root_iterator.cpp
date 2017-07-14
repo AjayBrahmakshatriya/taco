@@ -29,8 +29,8 @@ bool RootIterator::hasDuplicates() const {
   return false;
 }
 
-RangeType RootIterator::getRangeType() const {
-  return RangeType::Multiple;
+Expr RootIterator::getRangeSize() const {
+  return 1;
 }
 
 Expr RootIterator::getPtrVar() const {
@@ -69,7 +69,7 @@ ir::Stmt RootIterator::initDerivedVars() const {
   return Stmt();
 }
 
-ir::Stmt RootIterator::storePtr() const {
+ir::Stmt RootIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   return Stmt();
 }
 
@@ -78,14 +78,6 @@ ir::Stmt RootIterator::storeIdx(ir::Expr idx) const {
 }
 
 ir::Stmt RootIterator::initStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt RootIterator::resizePtrStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt RootIterator::resizeIdxStorage(ir::Expr size) const {
   return Stmt();
 }
 

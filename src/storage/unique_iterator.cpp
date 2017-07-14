@@ -14,12 +14,13 @@ UniqueIterator::UniqueIterator(std::string name, const Expr& tensor, int level,
   this->tensor = tensor;
   this->level = level;
 
-  std::string idxVarName = name + util::toString(tensor);
-  ptrVar = Var::make(util::toString(tensor) + std::to_string(level) + "_pos",
-                     Type(Type::Int));
-  endVar = Var::make(util::toString(tensor) + std::to_string(level) + "_end",
-                     Type(Type::Int));
-  idxVar = Var::make(idxVarName, Type(Type::Int));
+  const std::string prefix = util::toString(tensor) + std::to_string(level);
+  ptrVar = Var::make(prefix + "_pos", Type(Type::Int));
+  endVar = Var::make(prefix + "_end", Type(Type::Int));
+  
+  idxVar = Var::make(name + util::toString(tensor), Type(Type::Int));
+
+  idxCapacityVar = Var::make(prefix + "_idx_capacity", Type(Type::Int));
 }
 
 bool UniqueIterator::isDense() const {
@@ -42,8 +43,8 @@ bool UniqueIterator::hasDuplicates() const {
   return false;
 }
 
-RangeType UniqueIterator::getRangeType() const {
-  return RangeType::Single;
+Expr UniqueIterator::getRangeSize() const {
+  return 1;
 }
 
 Expr UniqueIterator::getPtrVar() const {
@@ -79,29 +80,37 @@ Stmt UniqueIterator::initDerivedVars() const {
                          true);
 }
 
-ir::Stmt UniqueIterator::storePtr() const {
+ir::Stmt UniqueIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   return Stmt();
 }
 
 ir::Stmt UniqueIterator::storeIdx(ir::Expr idx) const {
-  return Store::make(getIdxArr(), getPtrVar(), idx);
+  Stmt storeIdx = Store::make(getIdxArr(), getPtrVar(), idx);
+
+  Expr shouldResize = Lte::make(getIdxCapacity(), getPtrVar());
+  Expr newCapacity = Mul::make(2, getPtrVar());
+  Stmt updateCapacity = VarAssign::make(getIdxCapacity(), newCapacity);
+  Stmt resizeIdx = Allocate::make(getIdxArr(), getIdxCapacity(), true);
+  Stmt body = Block::make({updateCapacity, resizeIdx});
+  Stmt maybeResizeIdx = IfThenElse::make(shouldResize, body);
+
+  return Block::make({maybeResizeIdx, storeIdx});
+}
+
+ir::Stmt UniqueIterator::initStorage(ir::Expr size) const {
+  Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
+  Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
+
+  return Block::make({initIdxCapacity, allocIdxArr});
+}
+
+ir::Expr UniqueIterator::getIdxCapacity() const {
+  return idxCapacityVar;
 }
 
 ir::Expr UniqueIterator::getIdxArr() const {
   string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
   return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
-}
-
-ir::Stmt UniqueIterator::initStorage(ir::Expr size) const {
-  return Allocate::make(getIdxArr(), size);
-}
-
-ir::Stmt UniqueIterator::resizePtrStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt UniqueIterator::resizeIdxStorage(ir::Expr size) const {
-  return Allocate::make(getIdxArr(), size, true);
 }
 
 }}

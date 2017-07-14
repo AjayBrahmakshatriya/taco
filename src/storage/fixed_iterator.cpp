@@ -43,8 +43,8 @@ bool FixedIterator::hasDuplicates() const {
   return false;
 }
 
-RangeType FixedIterator::getRangeType() const {
-  return RangeType::Multiple;
+Expr FixedIterator::getRangeSize() const {
+  return fixedSize;
 }
 
 Expr FixedIterator::getPtrVar() const {
@@ -81,7 +81,7 @@ Stmt FixedIterator::initDerivedVars() const {
   return VarAssign::make(getIdxVar(), ptrVal);
 }
 
-ir::Stmt FixedIterator::storePtr() const {
+ir::Stmt FixedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   return Stmt();
 }
 
@@ -100,14 +100,6 @@ ir::Expr FixedIterator::getIdxArr() const {
 ir::Stmt FixedIterator::initStorage(ir::Expr size) const {
   return Block::make({Allocate::make(getPtrArr(), 1),
                       Allocate::make(getIdxArr(), size)});
-}
-
-ir::Stmt FixedIterator::resizePtrStorage(ir::Expr size) const {
-  return Stmt();
-}
-
-ir::Stmt FixedIterator::resizeIdxStorage(ir::Expr size) const {
-  return Allocate::make(getIdxArr(), size, true);
 }
 
 }}

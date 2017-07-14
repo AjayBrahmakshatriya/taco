@@ -89,7 +89,7 @@ bool Iterator::isDense() const {
 
 bool Iterator::isFixedRange() const {
   taco_iassert(defined());
-  return getRangeType() != RangeType::Variable;
+  return getRangeSize().defined();
 }
 
 bool Iterator::isRandomAccess() const {
@@ -107,9 +107,9 @@ bool Iterator::hasDuplicates() const {
   return iterator->hasDuplicates();
 }
 
-RangeType Iterator::getRangeType() const {
+ir::Expr Iterator::getRangeSize() const {
   taco_iassert(defined());
-  return iterator->getRangeType();
+  return iterator->getRangeSize();
 }
 
 ir::Expr Iterator::getTensor() const {
@@ -157,9 +157,9 @@ ir::Stmt Iterator::initDerivedVar() const {
   return iterator->initDerivedVars();
 }
 
-ir::Stmt Iterator::storePtr() const {
+ir::Stmt Iterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   taco_iassert(defined());
-  return iterator->storePtr();
+  return iterator->storePtr(ptr, start);
 }
 
 ir::Stmt Iterator::storeIdx(ir::Expr idx) const {
@@ -170,16 +170,6 @@ ir::Stmt Iterator::storeIdx(ir::Expr idx) const {
 ir::Stmt Iterator::initStorage(ir::Expr size) const {
   taco_iassert(defined());
   return iterator->initStorage(size);
-}
-
-ir::Stmt Iterator::resizePtrStorage(ir::Expr size) const {
-  taco_iassert(defined());
-  return iterator->resizePtrStorage(size);
-}
-
-ir::Stmt Iterator::resizeIdxStorage(ir::Expr size) const {
-  taco_iassert(defined());
-  return iterator->resizeIdxStorage(size);
 }
 
 bool Iterator::defined() const {
