@@ -725,7 +725,7 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
         }
       } else if (emitAssemble) {
         ctx.valsInc = 1;
-        for (auto& indexVar : tensor.getIndexVars()) {
+        for (auto& indexVar : resultPath.getVariables()) {
           Iterator iter = ctx.iterators[resultPath.getStep(indexVar)];
           if (iter.isFixedRange()) {
             ctx.valsInc = Mul::make(ctx.valsInc, iter.getRangeSize());
