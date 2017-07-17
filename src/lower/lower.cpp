@@ -551,7 +551,7 @@ static vector<Stmt> lower(const Target&    target,
                                  resultNextIterator.getRangeSize(), posInc);
             }
 
-            if (!isa<Literal>(inserted)) { 
+            if (resultStartVar.defined()) { 
               posInc = IfThenElse::make(Gt::make(resultInsertedVar, 0), posInc);
             }
             caseBody.push_back(posInc);
