@@ -496,30 +496,6 @@ static vector<Stmt> lower(const Target&    target,
           }
         }
 
-        // Conditionally resize result `idx` and `pos` arrays
-        //if (emitAssemble) {
-        //  Expr resize =
-        //      And::make(Eq::make(0, BitAnd::make(Add::make(rpos, 1), rpos)),
-        //                Lte::make(ctx.allocSize, Add::make(rpos, 1)));
-        //  Expr newSize = ir::Mul::make(2, ir::Add::make(rpos, 1));
-
-        //  // Resize result `idx` array
-        //  Stmt resizeIndices = resultIterator.resizeIdxStorage(newSize);
-
-        //  // Resize result `pos` array
-        //  if (indexVarCase == ABOVE_LAST_FREE) {
-        //    auto nextStep = resultPath.getStep(resultStep.getStep() + 1);
-        //    Stmt resizePos = ctx.iterators[nextStep].resizePtrStorage(newSize);
-        //    resizeIndices = Block::make({resizeIndices, resizePos});
-        //  } else if (resultStep == resultPath.getLastStep() && emitCompute) {
-        //    Expr vals = GetProperty::make(resultIterator.getTensor(),
-        //                                  TensorProperty::Values);
-        //    Stmt resizeVals = Allocate::make(vals, newSize, true);
-        //    resizeIndices = Block::make({resizeIndices, resizeVals});
-        //  }
-        //  posInc = Block::make({posInc,IfThenElse::make(resize,resizeIndices)});
-        //}
-
         // Only increment `pos` if values were produced at the next level
         if (indexVarCase == ABOVE_LAST_FREE) {
           auto resultNextStep = resultPath.getStep(resultStep.getStep() + 1);
