@@ -110,7 +110,7 @@ ir::Expr UniqueIterator::getIdxCapacity() const {
 
 ir::Expr UniqueIterator::getIdxArr() const {
   string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
-  return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
+  return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
 }
 
 }}
