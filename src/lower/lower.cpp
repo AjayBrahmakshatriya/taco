@@ -697,7 +697,8 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
         ctx.valsInc = 1;
         for (auto& indexVar : resultPath.getVariables()) {
           Iterator iter = ctx.iterators[resultPath.getStep(indexVar)];
-          if (iter.isFixedRange()) {
+          if (iter.isRandomAccess()) {
+            taco_iassert(iter.isFixedRange());
             ctx.valsInc = Mul::make(ctx.valsInc, iter.getRangeSize());
           } else {
             ctx.valsInc = 1;
