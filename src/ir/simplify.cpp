@@ -104,6 +104,7 @@ ir::Stmt simplify(const ir::Stmt& stmt) {
   // Perform copy propagation on variables that are added to a product of zero
   // and never re-assign, e.g. `int B1_pos = (0 * 42) + iB;`. These occur when
   // emitting code for top levels that are dense.
+  return stmt;
 
   // Collect candidates. These are variables that are never re-defined in the
   // scope they are declared in.
