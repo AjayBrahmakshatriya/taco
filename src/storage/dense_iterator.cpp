@@ -97,6 +97,10 @@ ir::Stmt DenseIterator::initStorage(ir::Expr size) const {
   return Stmt();
 }
 
+ir::Expr DenseIterator::getIndex(int index) const {
+  return Expr();
+}
+
 ir::Expr DenseIterator::getSizeArr() const {
   return GetProperty::make(tensor, TensorProperty::Dimensions, level);
 }

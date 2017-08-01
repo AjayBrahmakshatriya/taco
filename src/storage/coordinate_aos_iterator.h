@@ -1,5 +1,7 @@
-#ifndef TACO_STORAGE_ROOT_ITERATOR_H
-#define TACO_STORAGE_ROOT_ITERATOR_H
+#ifndef TACO_STORAGE_COORDINATE_AOS_H
+#define TACO_STORAGE_COORDINATE_AOS_H
+
+#include <string>
 
 #include "iterator.h"
 #include "taco/ir/ir.h"
@@ -7,10 +9,11 @@
 namespace taco {
 namespace storage {
 
-class RootIterator : public IteratorImpl {
+class CoordinateAosIterator : public IteratorImpl {
 public:
-  RootIterator(const ir::Expr& tensor);
-  virtual ~RootIterator() {};
+  CoordinateAosIterator(std::string name, const ir::Expr& tensor, int level,
+                 Iterator previous);
+  virtual ~CoordinateAosIterator() {};
 
   bool isDense() const;
   bool isFixedRange() const;
@@ -40,6 +43,19 @@ public:
   ir::Stmt initStorage(ir::Expr size) const;
 
   ir::Expr getIndex(int index) const;
+
+private:
+  ir::Expr tensor;
+  int level;
+
+  ir::Expr idxCapacityVar;
+
+  ir::Expr ptrVar;
+  ir::Expr endVar;
+  ir::Expr idxVar;
+
+  ir::Expr getIdxCapacity() const;
+  ir::Expr getIdxArr() const;
 };
 
 }}

@@ -186,12 +186,21 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   ret << "  ";
   
   auto tensor = op->tensor.as<Var>();
-  if (op->property == TensorProperty::Values) {
-    // for the values, it's in the last slot
-    ret << toCType(tensor->type, true);
-    ret << " restrict " << varname << " = (double*)(";
-    ret << tensor->name << "->vals);\n";
-    return ret.str();
+  switch (op->property) {
+    case TensorProperty::Values:
+      // for the values, it's in the last slot
+      ret << toCType(tensor->type, true);
+      ret << " restrict " << varname << " = (double*)(";
+      ret << tensor->name << "->vals);\n";
+      return ret.str();
+    case TensorProperty::Order:
+      ret << "int " << varname << " = " << tensor->name << "->order;\n";
+      return ret.str();
+    case TensorProperty::Indices:
+      break;
+    default:
+      taco_not_supported_yet;
+      break;
   }
   
   taco_iassert((size_t)op->dimension < tensor->format.getOrder()) <<
@@ -226,10 +235,18 @@ string packTensorProperty(string varname, Expr tnsr, TensorProperty property,
   ret << "  ";
   
   auto tensor = tnsr.as<Var>();
-  if (property == TensorProperty::Values) {
-    ret << tensor->name << "->vals";
-    ret << " = (uint8_t*)" << varname << ";\n";
-    return ret.str();
+  switch (property) {
+    case TensorProperty::Values:
+      ret << tensor->name << "->vals";
+      ret << " = (uint8_t*)" << varname << ";\n";
+      return ret.str();
+    case TensorProperty::Order:
+      return "";
+    case TensorProperty::Indices:
+      break;
+    default:
+      taco_not_supported_yet;
+      break;
   }
   
   taco_iassert(dim < (int)tensor->format.getOrder()) <<

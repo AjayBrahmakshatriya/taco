@@ -7,6 +7,9 @@
 #include "uncompressed_iterator.h"
 #include "coordinate_iterator.h"
 #include "unique_iterator.h"
+#include "uncompressed_aos_iterator.h"
+#include "coordinate_aos_iterator.h"
+#include "unique_aos_iterator.h"
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -15,6 +18,8 @@
 #include "taco/storage/array.h"
 #include "taco/storage/array_util.h"
 #include "taco/util/strings.h"
+
+#define AOS 1
 
 using namespace std;
 
@@ -58,18 +63,33 @@ Iterator Iterator::make(string name, const ir::Expr& tensorVar,
       break;
     }
     case DimensionType::Uncompressed: {
+#if AOS
+      iterator.iterator =
+          std::make_shared<UncompressedAosIterator>(name, tensorVar, dim, parent);
+#else
       iterator.iterator =
           std::make_shared<UncompressedIterator>(name, tensorVar, dim, parent);
+#endif
       break;
     }
     case DimensionType::Coordinate: {
+#if AOS
+      iterator.iterator =
+          std::make_shared<CoordinateAosIterator>(name, tensorVar, dim, parent);
+#else
       iterator.iterator =
           std::make_shared<CoordinateIterator>(name, tensorVar, dim, parent);
+#endif
       break;
     }
     case DimensionType::Unique: {
+#if AOS
+      iterator.iterator =
+          std::make_shared<UniqueAosIterator>(name, tensorVar, dim, parent);
+#else
       iterator.iterator =
           std::make_shared<UniqueIterator>(name, tensorVar, dim, parent);
+#endif
       break;
     }
   }
@@ -170,6 +190,11 @@ ir::Stmt Iterator::storeIdx(ir::Expr idx) const {
 ir::Stmt Iterator::initStorage(ir::Expr size) const {
   taco_iassert(defined());
   return iterator->initStorage(size);
+}
+
+ir::Expr Iterator::getIndex(int index) const {
+  taco_iassert(defined());
+  return iterator->getIndex(index);
 }
 
 bool Iterator::defined() const {

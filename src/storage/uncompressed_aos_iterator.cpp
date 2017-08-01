@@ -1,4 +1,4 @@
-#include "uncompressed_iterator.h"
+#include "uncompressed_aos_iterator.h"
 
 #include "taco/util/strings.h"
 
@@ -8,7 +8,7 @@ using namespace taco::ir;
 namespace taco {
 namespace storage {
 
-UncompressedIterator::UncompressedIterator(std::string name, const Expr& tensor, int level,
+UncompressedAosIterator::UncompressedAosIterator(std::string name, const Expr& tensor, int level,
                                Iterator previous)
     : IteratorImpl(previous, tensor) {
   this->tensor = tensor;
@@ -24,64 +24,66 @@ UncompressedIterator::UncompressedIterator(std::string name, const Expr& tensor,
   idxCapacityVar = Var::make(prefix + "_idx_capacity", Type(Type::Int));
 }
 
-bool UncompressedIterator::isDense() const {
+bool UncompressedAosIterator::isDense() const {
   return false;
 }
 
-bool UncompressedIterator::isFixedRange() const {
+bool UncompressedAosIterator::isFixedRange() const {
   return false;
 }
 
-bool UncompressedIterator::isRandomAccess() const {
+bool UncompressedAosIterator::isRandomAccess() const {
   return false;
 }
 
-bool UncompressedIterator::isSequentialAccess() const {
+bool UncompressedAosIterator::isSequentialAccess() const {
   return true;
 }
 
-bool UncompressedIterator::hasDuplicates() const {
+bool UncompressedAosIterator::hasDuplicates() const {
   return true;
 }
 
-Expr UncompressedIterator::getRangeSize() const {
+Expr UncompressedAosIterator::getRangeSize() const {
   return Expr();
 }
 
-Expr UncompressedIterator::getPtrVar() const {
+Expr UncompressedAosIterator::getPtrVar() const {
   return ptrVar;
 }
 
-Expr UncompressedIterator::getEndVar() const {
+Expr UncompressedAosIterator::getEndVar() const {
   return endVar;
 }
 
-Expr UncompressedIterator::getIdxVar() const {
+Expr UncompressedAosIterator::getIdxVar() const {
   return idxVar;
 }
 
-Expr UncompressedIterator::getIteratorVar() const {
+Expr UncompressedAosIterator::getIteratorVar() const {
   return ptrVar;
 }
 
-Expr UncompressedIterator::begin() const {
+Expr UncompressedAosIterator::begin() const {
   return Load::make(getPtrArr(), getParent().getPtrVar());
 }
 
-Expr UncompressedIterator::end() const {
+Expr UncompressedAosIterator::end() const {
   return Load::make(getPtrArr(), getParent().getEndVar());
 }
 
-Expr UncompressedIterator::getIdx(ir::Expr pos) const {
-  return Load::make(getIdxArr(), pos);
+Expr UncompressedAosIterator::getIdx(ir::Expr pos) const {
+  Expr order = GetProperty::make(tensor, TensorProperty::Order);
+  Expr loc = Add::make(Mul::make(pos, order), level);
+
+  return Load::make(getIdxArr(), loc);
 }
 
-Stmt UncompressedIterator::initDerivedVars() const {
-  return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
-                         true);
+Stmt UncompressedAosIterator::initDerivedVars() const {
+  return VarAssign::make(getIdxVar(), getIdx(getPtrVar()), true);
 }
 
-ir::Stmt UncompressedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
+ir::Stmt UncompressedAosIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   Expr parentPos = getParent().getPtrVar();
   Stmt storePos = Store::make(getPtrArr(), Add::make(parentPos, 1), ptr);
 
@@ -99,47 +101,38 @@ ir::Stmt UncompressedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
   return Block::make({maybeResizePos, storePos});
 }
 
-ir::Stmt UncompressedIterator::storeIdx(ir::Expr idx) const {
-  Stmt storeIdx = Store::make(getIdxArr(), getPtrVar(), idx);
-
-  Expr shouldResize = Lte::make(getIdxCapacity(), getPtrVar());
-  Expr newCapacity = Mul::make(2, getPtrVar());
-  Stmt updateCapacity = VarAssign::make(getIdxCapacity(), newCapacity);
-  Stmt resizeIdx = Allocate::make(getIdxArr(), getIdxCapacity(), true);
-  Stmt body = Block::make({updateCapacity, resizeIdx});
-  Stmt maybeResizeIdx = IfThenElse::make(shouldResize, body);
-
-  return Block::make({maybeResizeIdx, storeIdx});
+ir::Stmt UncompressedAosIterator::storeIdx(ir::Expr idx) const {
+  Expr order = GetProperty::make(tensor, TensorProperty::Order);
+  Expr loc = Add::make(Mul::make(getPtrVar(), order), level);
+  
+  return Store::make(getIdxArr(), loc, idx);
 }
 
-ir::Stmt UncompressedIterator::initStorage(ir::Expr size) const {
+ir::Stmt UncompressedAosIterator::initStorage(ir::Expr size) const {
   Stmt initPosCapacity = VarAssign::make(getPosCapacity(), size, true);
-  Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
   Stmt allocPosArr = Allocate::make(getPtrArr(), getPosCapacity());
-  Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
   Stmt initPosArr = Store::make(getPtrArr(), 0, 0);
 
-  return Block::make({initPosCapacity, initIdxCapacity, allocPosArr, 
-                      allocIdxArr, initPosArr});
+  return Block::make({initPosCapacity, allocPosArr, initPosArr});
 }
 
-ir::Expr UncompressedIterator::getPosCapacity() const {
+ir::Expr UncompressedAosIterator::getPosCapacity() const {
   return posCapacityVar;
 }
 
-ir::Expr UncompressedIterator::getIdxCapacity() const {
+ir::Expr UncompressedAosIterator::getIdxCapacity() const {
   return idxCapacityVar;
 }
 
-ir::Expr UncompressedIterator::getPtrArr() const {
+ir::Expr UncompressedAosIterator::getPtrArr() const {
   return getIndex(0);
 }
 
-ir::Expr UncompressedIterator::getIdxArr() const {
+ir::Expr UncompressedAosIterator::getIdxArr() const {
   return getIndex(1);
 }
 
-ir::Expr UncompressedIterator::getIndex(int index) const {
+ir::Expr UncompressedAosIterator::getIndex(int index) const {
   switch (index) {
     case 0: {
       string name = tensor.as<Var>()->name + to_string(level) + "_pos_arr";

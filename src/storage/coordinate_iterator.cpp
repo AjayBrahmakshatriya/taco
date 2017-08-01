@@ -109,8 +109,19 @@ ir::Expr CoordinateIterator::getIdxCapacity() const {
 }
 
 ir::Expr CoordinateIterator::getIdxArr() const {
-  string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
-  return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
+  return getIndex(0);
+}
+
+ir::Expr CoordinateIterator::getIndex(int index) const {
+  switch (index) {
+    case 0: {
+      string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
+      return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
+    }
+    default:
+      break;
+  }
+  return Expr();
 }
 
 }}

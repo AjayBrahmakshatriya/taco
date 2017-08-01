@@ -90,6 +90,8 @@ public:
 
   ir::Stmt initStorage(ir::Expr size) const;
 
+  ir::Expr getIndex(int index) const;
+
   /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;
 
@@ -138,6 +140,8 @@ public:
   virtual ir::Stmt storeIdx(ir::Expr idx) const                 = 0;
 
   virtual ir::Stmt initStorage(ir::Expr size) const             = 0;
+
+  virtual ir::Expr getIndex(int index) const                    = 0;
 
 private:
   Iterator parent;

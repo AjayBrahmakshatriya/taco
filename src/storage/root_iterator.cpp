@@ -81,4 +81,8 @@ ir::Stmt RootIterator::initStorage(ir::Expr size) const {
   return Stmt();
 }
 
+ir::Expr RootIterator::getIndex(int index) const {
+  return Expr();
+}
+
 }}

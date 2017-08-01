@@ -42,6 +42,8 @@ public:
 
   ir::Stmt initStorage(ir::Expr size) const;
 
+  ir::Expr getIndex(int index) const;
+
 private:
   ir::Expr tensor;
   int level;

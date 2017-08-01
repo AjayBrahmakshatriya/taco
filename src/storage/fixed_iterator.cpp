@@ -90,16 +90,19 @@ ir::Stmt FixedIterator::storeIdx(ir::Expr idx) const {
 }
 
 ir::Expr FixedIterator::getPtrArr() const {
-  return GetProperty::make(tensor, TensorProperty::Dimensions, level);
+  return Expr();
 }
 
 ir::Expr FixedIterator::getIdxArr() const {
-  return GetProperty::make(tensor, TensorProperty::Dimensions, level);
+  return Expr();
 }
 
 ir::Stmt FixedIterator::initStorage(ir::Expr size) const {
-  return Block::make({Allocate::make(getPtrArr(), 1),
-                      Allocate::make(getIdxArr(), size)});
+  return Stmt();
+}
+
+ir::Expr FixedIterator::getIndex(int index) const {
+  return Expr();
 }
 
 }}

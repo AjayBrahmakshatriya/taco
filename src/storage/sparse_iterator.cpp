@@ -132,14 +132,27 @@ ir::Expr SparseIterator::getIdxCapacity() const {
 }
 
 ir::Expr SparseIterator::getPtrArr() const {
-  string name = tensor.as<Var>()->name + to_string(level) + "_pos_arr";
-  return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
-
+  return getIndex(0);
 }
 
 ir::Expr SparseIterator::getIdxArr() const {
-  string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
-  return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
+  return getIndex(1);
+}
+
+ir::Expr SparseIterator::getIndex(int index) const {
+  switch (index) {
+    case 0: {
+      string name = tensor.as<Var>()->name + to_string(level) + "_pos_arr";
+      return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
+    }
+    case 1: {
+      string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
+      return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
+    }
+    default:
+      break;
+  }
+  return Expr();
 }
 
 }}
