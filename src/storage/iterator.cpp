@@ -19,7 +19,7 @@
 #include "taco/storage/array_util.h"
 #include "taco/util/strings.h"
 
-#define AOS 1
+#define AOS 0
 
 using namespace std;
 
