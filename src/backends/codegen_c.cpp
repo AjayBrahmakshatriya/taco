@@ -197,6 +197,7 @@ string unpackTensorProperty(string varname, const GetProperty* op,
       ret << "int " << varname << " = " << tensor->name << "->order;\n";
       return ret.str();
     case TensorProperty::Indices:
+    case TensorProperty::Dimensions:
       break;
     default:
       taco_not_supported_yet;
@@ -243,6 +244,7 @@ string packTensorProperty(string varname, Expr tnsr, TensorProperty property,
     case TensorProperty::Order:
       return "";
     case TensorProperty::Indices:
+    case TensorProperty::Dimensions:
       break;
     default:
       taco_not_supported_yet;
