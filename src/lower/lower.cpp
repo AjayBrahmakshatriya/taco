@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <vector>
-#include <stack>
 #include <set>
 #include <map>
 #include <list>
@@ -89,12 +88,16 @@ enum ComputeCase {
   BELOW_LAST_FREE
 };
 
-static bool isFused(const Iterator& iter, const Context& ctx) {
+static bool isFusedIteratorTail(const Iterator& iter, const Context& ctx) {
   return util::contains(ctx.fusedIterators, iter);
 }
 
 static bool isFusedIteratorStart(const Iterator& iter, const Context& ctx) {
   return util::contains(ctx.fusedIteratorsHead, iter);
+}
+
+static bool isFused(const Iterator& iter, const Context& ctx) {
+  return isFusedIteratorStart(iter, ctx) || isFusedIteratorTail(iter, ctx);
 }
 
 static ComputeCase getComputeCase(const IndexVar& indexVar,
@@ -174,17 +177,17 @@ static IndexExpr emitAvailableExprs(const IndexVar& indexVar,
 
 static void emitComputeExpr(const Target& target, const IndexVar& indexVar,
                             const IndexExpr& indexExpr, const Context& ctx,
-                            const bool doReduce, vector<Stmt>& stmts) {
+                            vector<Stmt>& stmts) {
   Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators,
                                       ctx.schedule, ctx.temporaries, stmts);
   if (target.pos.defined()) {
-    Stmt store = doReduce 
+    Stmt store = ctx.schedule.hasReductionVariableAncestor(indexVar) 
         ? compoundStore(target.tensor, target.pos, expr)
         :   Store::make(target.tensor, target.pos, expr);
     stmts.push_back(store);
   }
   else {
-    Stmt assign = doReduce
+    Stmt assign = ctx.schedule.hasReductionVariableAncestor(indexVar) 
         ?  compoundAssign(target.tensor, expr)
         : VarAssign::make(target.tensor, expr);
     stmts.push_back(assign);
@@ -303,67 +306,75 @@ static Stmt createIfStatements(vector<pair<Expr,Stmt>> cases,
 }
 
 static void mergeIterators(Context& ctx, const IndexExpr& indexExpr) {
-  const auto& resultPath = ctx.schedule.getResultTensorPath();
+  const TensorPath& resultPath = ctx.schedule.getResultTensorPath();
+  const bool emitAssemble = util::contains(ctx.properties, Assemble);
+  const Expr dummy = Var::make("dummy", Type(Type::Int));
 
+  for (int step = 0; step < (int)resultPath.getSize(); ++step) {
+    const TensorPathStep resultStep = resultPath.getStep(step);
+    const Iterator iterator = ctx.iterators[resultStep];
+
+    if (!iterator.isRandomAccess() || (emitAssemble && 
+        (iterator.storePtr(dummy, dummy).defined() || 
+        iterator.storeIdx(dummy).defined()))) {
+      return;
+    }
+  }
+
+  Iterator lastResultIterator;
+  IndexVar lastResultVar;
+  
+  bool isGather = (resultPath.getSize() > 0);
+  if (isGather) {
+    lastResultIterator = ctx.iterators[resultPath.getLastStep()];
+    lastResultVar = resultPath.getVariables().back();
+    isGather = !ctx.schedule.hasReductionVariableAncestor(lastResultVar);
+  }
+  
   std::map<Iterator,std::list<Iterator>> fusedIterators;
+
   for (const auto& tensorPath : ctx.schedule.getTensorPaths()) {
     std::list<Iterator> fusedIterator;
+
     for (int step = (int)tensorPath.getSize() - 1; step >= 0; --step) {
       const TensorPathStep tensorStep = tensorPath.getStep(step);
       Iterator iterator = ctx.iterators[tensorStep];
 
       if (!iterator.isOnlyChild()) {
-        for (const auto it : fusedIterator) {
-          std::cout << it << " " ;
-        }
-        std::cout << std::endl;
         if (!fusedIterator.empty()) {
           fusedIterators[iterator] = fusedIterator;
           fusedIterator.clear();
         }
-        //ctx.fusedIteratorsHead.insert(iterator);
         continue;
       }
 
       const IndexVar& indexVar = tensorPath.getVariables()[step];
       const MergeLattice lattice = MergeLattice::make(
           indexExpr, indexVar, ctx.schedule, ctx.iterators);
-      
-      if (!needsMerge(lattice)) {
-        //ctx.fusedIterators.insert(iterator);
-        //iterator.setFused(true);
-        if (!fusedIterator.empty() || !iterator.hasDuplicates()) {
-          fusedIterator.push_front(iterator);
-        }
-        //const TensorPathStep resultStep = resultPath.getStep(indexVar);
-        //if (resultStep.getStep() >= 0) {
-        //  Iterator resultIterator = ctx.iterators[resultStep];
-        //  ctx.fusedIterators.insert(resultIterator);
-        //  resultIterator.setFused(true);
-        //  //if (resultIterator.isRandomAccess() || resultIterator.isFixedRange() && 
-        //}
-      } 
-    }
-  }
-
-  if (!resultPath.getVariables().empty()) {
-    const auto& lastResultVar = resultPath.getVariables().back();
-    if (ctx.schedule.hasReductionVariableAncestor(lastResultVar)) {
-      const bool emitAssemble = util::contains(ctx.properties, Assemble);
-
-      for (int step = 0; step < (int)resultPath.getSize(); ++step) {
-        const TensorPathStep resultStep = resultPath.getStep(step);
-        const Iterator iterator = ctx.iterators[resultStep];
-
-        const Expr dummy = Var::make("dummy", Type(Type::Int));
-        if (!iterator.isRandomAccess() || (emitAssemble && 
-            (iterator.storePtr(dummy, dummy).defined() || 
-            iterator.storeIdx(dummy).defined()))) {
-          return;
-        }
+     
+      if (needsMerge(lattice)) {
+        fusedIterator.clear();
+        continue;
       }
-    } else {
-      return;
+
+      if (isGather && indexVar == lastResultVar && 
+          iterator.hasDuplicates() && !lastResultIterator.hasDuplicates()) {
+        fusedIterator.clear();
+        continue;
+      }
+
+      if (step > 0 && tensorPath.getVariables()[step - 1] != 
+          ctx.schedule.getParent(indexVar)) {
+        fusedIterator.clear();
+        continue;
+      }
+     
+      // TODO: Check for subexpressions that would have to be recomputed and 
+      //       maybe don't fuse if such subexpressions exist?
+
+      if (!fusedIterator.empty() || !iterator.hasDuplicates()) {
+        fusedIterator.push_front(iterator);
+      }
     }
   }
 
@@ -447,8 +458,7 @@ static vector<Stmt> lower(const Target&    target,
       Stmt initEnd = VarAssign::make(iterator.getEndVar(), val, true);
       loopBody.push_back(initEnd);
 
-      if (iterator.hasDuplicates() && !isFused(iterator, ctx) && 
-          !isFusedIteratorStart(iterator, ctx)) {
+      if (iterator.hasDuplicates() && !isFused(iterator, ctx)) {
         Expr tensorIdx = iterator.getIdxVar();
         Expr endVar = iterator.getEndVar();
 
@@ -566,13 +576,7 @@ static vector<Stmt> lower(const Target&    target,
       // Emit code to compute and store/assign result 
       if (emitCompute &&
           (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
-        std::cout << indexVar << " " << lq << " " << lq.getRangeIterators().front() << std::endl;
-        //const Iterator iter = lq.getRangeIterators().front();
-        //const bool doReduce = 
-        //    ctx.schedule.hasReductionVariableAncestor(indexVar) ||  
-        //    (iter.hasDuplicates() && (iter.isFused() || isFusedIteratorStart(iter, ctx)));
-        const bool doReduce = ctx.schedule.hasReductionVariableAncestor(indexVar); 
-        emitComputeExpr(target, indexVar, lqExpr, ctx, doReduce, caseBody);
+        emitComputeExpr(target, indexVar, lqExpr, ctx, caseBody);
       }
 
       // Emit code to increment the result `pos` variable and to allocate
@@ -599,21 +603,21 @@ static vector<Stmt> lower(const Target&    target,
             auto nextIteratorVar = resultNextIterator.getIteratorVar();
             auto nextIteratorName = nextIteratorVar.as<Var>()->name;
 
-            const std::string insertedName = nextIteratorName + "_inserted";
-            Expr resultInsertedVar = Var::make(insertedName, Type(Type::Int));
+            if (!isFusedIteratorTail(resultNextIterator, ctx)) {
+              const std::string insertedName = nextIteratorName + "_inserted";
+              Expr resultInsertedVar = Var::make(insertedName, Type(Type::Int));
 
-            Expr nextIteratorPos = resultNextIterator.getPtrVar();
-            Expr inserted = resultStartVar.defined() ? 
-                            Sub::make(nextIteratorPos, resultStartVar) : 
-                            resultNextIterator.getRangeSize();
-            taco_iassert(inserted.defined() && 
-                         (!isa<Literal>(inserted) || inserted.as<Literal>() > 0));
+              Expr nextIteratorPos = resultNextIterator.getPtrVar();
+              Expr inserted = resultStartVar.defined() ? 
+                              Sub::make(nextIteratorPos, resultStartVar) : 
+                              resultNextIterator.getRangeSize();
+              taco_iassert(inserted.defined() && 
+                           (!isa<Literal>(inserted) || inserted.as<Literal>() > 0));
 
-            Stmt initResultInserted = VarAssign::make(resultInsertedVar, 
-                                                      inserted, true);
-            caseBody.push_back(initResultInserted);
+              Stmt initResultInserted = VarAssign::make(resultInsertedVar, 
+                                                        inserted, true);
+              caseBody.push_back(initResultInserted);
 
-            if (!isFused(resultNextIterator, ctx)) {
               if (resultIterator.hasDuplicates() && 
                   resultNextIterator.isFixedRange() && 
                   !resultNextIterator.isRandomAccess()) {
@@ -642,8 +646,7 @@ static vector<Stmt> lower(const Target&    target,
     Iterator iter = lp.getRangeIterators().front();
 
     // Emit loop (while loop for merges and for loop for non-merges)
-    if (emitMerge || (iter.hasDuplicates() && !isFused(iter, ctx) && 
-        !isFusedIteratorStart(iter, ctx))) {
+    if (emitMerge || (iter.hasDuplicates() && !isFused(iter, ctx))) {
       // Emit code to increment sequential access `pos` variables. Variables 
       // that may not be consumed in an iteration (i.e. their iteration space is
       // different from the loop iteration space) are guarded by a conditional:
@@ -669,7 +672,7 @@ static vector<Stmt> lower(const Target&    target,
     } else {
       loop = Block::make(loopBody);
 
-      if (!isFused(iter, ctx)) {
+      if (!isFusedIteratorTail(iter, ctx)) {
         const auto parallelize = doParallelize(indexVar, iter.getTensor(), ctx);
         loop = For::make(iter.getIteratorVar(), iter.begin(), iter.end(), 
                          1, loop, parallelize);
@@ -714,7 +717,6 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
 
   // Create the schedule and the iterators of the lowered code
   ctx.schedule = IterationSchedule::make(tensor);
-  std::cout << ctx.schedule << std::endl;
   ctx.iterators = Iterators(ctx.schedule, tensorVars);
 
   mergeIterators(ctx, indexExpr);
