@@ -112,6 +112,12 @@ bool Iterator::isFixedRange() const {
   return getRangeSize().defined();
 }
 
+bool Iterator::isOnlyChild() const {
+  taco_iassert(defined());
+  return isFixedRange() && ir::isa<ir::Literal>(getRangeSize()) &&
+         getRangeSize().as<ir::Literal>()->value == 1;
+}
+
 bool Iterator::isRandomAccess() const {
   taco_iassert(defined());
   return iterator->isRandomAccess();

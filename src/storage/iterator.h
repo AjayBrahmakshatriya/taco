@@ -18,6 +18,7 @@ class Expr;
 
 namespace storage {
 class IteratorImpl;
+class IteratorPack;
 
 /// A compile-time iterator over a tensor storage level. This class can be used
 /// to generate the IR expressions for iterating over different level types.
@@ -41,6 +42,8 @@ public:
 
   /// Returns true if the iterator iterates over ranges of fixed size.
   bool isFixedRange() const;
+
+  bool isOnlyChild() const;
 
   /// Returns true if the iterator supports random access
   bool isRandomAccess() const;
