@@ -4,6 +4,7 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "taco/ir/ir.h"
 #include "taco/util/comparable.h"
@@ -17,8 +18,8 @@ class Expr;
 }
 
 namespace storage {
-class IteratorImpl;
 class IteratorPack;
+class IteratorImpl;
 
 /// A compile-time iterator over a tensor storage level. This class can be used
 /// to generate the IR expressions for iterating over different level types.
@@ -30,6 +31,9 @@ public:
   static Iterator make(std::string name, const ir::Expr& tensorVar,
                        int dim, DimensionType dimType, int dimOrder,
                        Iterator parent, const TensorBase& tensor);
+
+  /// Get the iterator pack this iterator belongs to.
+  const IteratorPack& getPack() const;
 
   /// Get the parent of this iterator in its iterator list.
   const Iterator& getParent() const;
@@ -98,14 +102,38 @@ public:
   /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;
 
+  friend bool operator==(const Iterator&, const IteratorImpl*);
+  friend bool operator!=(const Iterator&, const IteratorImpl*);
+
   friend bool operator==(const Iterator&, const Iterator&);
   friend bool operator<(const Iterator&, const Iterator&);
   friend std::ostream& operator<<(std::ostream&, const Iterator&);
 
+  friend class IteratorPack;
+
 private:
+  void setPack(IteratorPack pack);
+
   std::shared_ptr<IteratorImpl> iterator;
 };
 
+class IteratorPack {
+public:
+  IteratorPack();  
+
+  static IteratorPack make(std::vector<Iterator> iterators);
+
+  size_t getSize() const;
+
+  Iterator getFirstIterator() const;
+  Iterator getLastIterator() const;
+
+  size_t getPosition(const IteratorImpl* iter) const;
+
+private:
+  struct Content;
+  std::shared_ptr<Content> content;
+};
 
 /// Abstract class for iterators over different types of storage levels.
 class IteratorImpl {
@@ -115,8 +143,9 @@ public:
 
   std::string getName() const;
 
-  const Iterator& getParent() const;
-  const ir::Expr& getTensor() const;
+  const IteratorPack& getPack() const;
+  const Iterator&     getParent() const;
+  const ir::Expr&     getTensor() const;
 
   virtual bool isDense() const                                  = 0;
 
@@ -146,9 +175,12 @@ public:
 
   virtual ir::Expr getIndex(int index) const                    = 0;
 
+  void setPack(IteratorPack pack);
+
 private:
-  Iterator parent;
-  ir::Expr tensor;
+  IteratorPack pack;
+  Iterator     parent;
+  ir::Expr     tensor;
 };
 
 std::ostream& operator<<(std::ostream&, const IteratorImpl&);

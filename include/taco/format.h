@@ -35,6 +35,10 @@ public:
   Format(const std::vector<DimensionType>& dimensionTypes,
          const std::vector<int>& dimensionOrder);
 
+  Format(const std::vector<DimensionType>& dimensionTypes,
+         const std::vector<int>& dimensionOrder,
+         const std::vector<int>& dimensionPackBoundaries);
+
   /// Returns the number of dimensions in the format.
   size_t getOrder() const;
 
@@ -46,9 +50,12 @@ public:
   /// dimension i.
   const std::vector<int>& getDimensionOrder() const;
 
+  const std::vector<int>& getDimensionPackBoundaries() const;
+
 private:
   std::vector<DimensionType> dimensionTypes;
   std::vector<int> dimensionOrder;
+  std::vector<int> dimensionPackBoundaries;
 };
 
 bool operator==(const Format&, const Format&);

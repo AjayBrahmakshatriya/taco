@@ -229,31 +229,37 @@ int main(int argc, char* argv[]) {
         return reportError("Incorrect format descriptor", 3);
       }
       string tensorName = descriptor[0];
-      string formatString = descriptor[1];
+      std::vector<std::string> formatsList = util::split(descriptor[1], ",");
       std::vector<DimensionType> levelTypes;
       std::vector<int> dimensionOrder;
-      for (size_t i = 0; i < formatString.size(); i++) {
-        switch (formatString[i]) {
-          case 'd':
-            levelTypes.push_back(DimensionType::Dense);
-            break;
-          case 's':
-            levelTypes.push_back(DimensionType::Sparse);
-            break;
-          case 'u':
-            levelTypes.push_back(DimensionType::Uncompressed);
-            break;
-          case 'c':
-            levelTypes.push_back(DimensionType::Coordinate);
-            break;
-          case 'q':
-            levelTypes.push_back(DimensionType::Unique);
-            break;
-          default:
-            return reportError("Incorrect format descriptor", 3);
-            break;
+      std::vector<int> dimensionPackBoundaries; 
+      dimensionPackBoundaries.push_back(0);
+      size_t idx = 0;
+      for (const auto& format : formatsList) {
+        for (size_t i = 0; i < format.size(); i++) {
+          switch (format[i]) {
+            case 'd':
+              levelTypes.push_back(DimensionType::Dense);
+              break;
+            case 's':
+              levelTypes.push_back(DimensionType::Sparse);
+              break;
+            case 'u':
+              levelTypes.push_back(DimensionType::Uncompressed);
+              break;
+            case 'c':
+              levelTypes.push_back(DimensionType::Coordinate);
+              break;
+            case 'q':
+              levelTypes.push_back(DimensionType::Unique);
+              break;
+            default:
+              return reportError("Incorrect format descriptor", 3);
+              break;
+          }
+          dimensionOrder.push_back(idx++);
         }
-        dimensionOrder.push_back(i);
+        dimensionPackBoundaries.push_back(idx);
       }
       if (descriptor.size() > 2) {
         std::vector<std::string> dims = util::split(descriptor[2], ",");
@@ -262,7 +268,8 @@ int main(int argc, char* argv[]) {
           dimensionOrder.push_back(std::stoi(dim));
         }
       }
-      formats.insert({tensorName, Format(levelTypes, dimensionOrder)});
+      Format format(levelTypes, dimensionOrder, dimensionPackBoundaries);
+      formats.insert({tensorName, format});
     }
     else if ("-d" == argName) {
       vector<string> descriptor = util::split(argValue, ":");

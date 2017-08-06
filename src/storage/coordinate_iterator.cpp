@@ -72,12 +72,15 @@ Expr CoordinateIterator::end() const {
 }
 
 Expr CoordinateIterator::getIdx(ir::Expr pos) const {
-  return Load::make(getIdxArr(), pos);
+  Expr stride = (int)getPack().getSize();
+  Expr offset = (int)getPack().getPosition(this);
+  Expr loc = Add::make(Mul::make(pos, stride), offset);
+
+  return Load::make(getIdxArr(), loc);
 }
 
 Stmt CoordinateIterator::initDerivedVars() const {
-  return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
-                         true);
+  return VarAssign::make(getIdxVar(), getIdx(getPtrVar()), true);
 }
 
 ir::Stmt CoordinateIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
@@ -85,10 +88,17 @@ ir::Stmt CoordinateIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
 }
 
 ir::Stmt CoordinateIterator::storeIdx(ir::Expr idx) const {
-  Stmt storeIdx = Store::make(getIdxArr(), getPtrVar(), idx);
+  Expr stride = (int)getPack().getSize();
+  Expr offset = (int)getPack().getPosition(this);
+  Expr loc = Add::make(Mul::make(getPtrVar(), stride), offset);
+  Stmt storeIdx = Store::make(getIdxArr(), loc, idx);
 
-  Expr shouldResize = Lte::make(getIdxCapacity(), getPtrVar());
-  Expr newCapacity = Mul::make(2, getPtrVar());
+  if (getPack().getLastIterator() != this) {
+    return storeIdx;
+  }
+
+  Expr shouldResize = Lte::make(getIdxCapacity(), loc);
+  Expr newCapacity = Mul::make(2, loc);
   Stmt updateCapacity = VarAssign::make(getIdxCapacity(), newCapacity);
   Stmt resizeIdx = Allocate::make(getIdxArr(), getIdxCapacity(), true);
   Stmt body = Block::make({updateCapacity, resizeIdx});
@@ -98,6 +108,10 @@ ir::Stmt CoordinateIterator::storeIdx(ir::Expr idx) const {
 }
 
 ir::Stmt CoordinateIterator::initStorage(ir::Expr size) const {
+  if (getPack().getLastIterator() != this) {
+    return Stmt();
+  }
+
   Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
   Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
 
@@ -109,16 +123,21 @@ ir::Expr CoordinateIterator::getIdxCapacity() const {
 }
 
 ir::Expr CoordinateIterator::getIdxArr() const {
-  return getIndex(0);
+  return getIndex(1);
 }
 
 ir::Expr CoordinateIterator::getIndex(int index) const {
+  if (getPack().getFirstIterator() != this) {
+    return getPack().getFirstIterator().getIndex(index);
+  }
+
   switch (index) {
-    case 0: {
+    case 1: {
       string name = tensor.as<Var>()->name + to_string(level) + "_idx_arr";
-      return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
+      return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
     }
     default:
+      taco_iassert(false);
       break;
   }
   return Expr();

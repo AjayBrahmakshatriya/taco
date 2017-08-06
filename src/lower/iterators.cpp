@@ -12,6 +12,7 @@
 using namespace std;
 using namespace taco::ir;
 using taco::storage::Iterator;
+using taco::storage::IteratorPack;
 
 namespace taco {
 namespace lower {
@@ -31,16 +32,24 @@ Iterators::Iterators(const IterationSchedule& schedule,
     storage::Iterator parent = Iterator::makeRoot(tensorVar);
     roots.insert({path, parent});
 
-    for (int i=0; i < (int)path.getSize(); ++i) {
-      string name = path.getVariables()[i].getName();
+    const auto& packBoundaries = format.getDimensionPackBoundaries();
+    if (!packBoundaries.empty()) {
+      for (size_t j = 0; j < packBoundaries.size() - 1; ++j) {
+        std::vector<Iterator> iteratorPack;
+        for (int i = packBoundaries[j]; i < packBoundaries[j + 1]; ++i) {
+          string name = path.getVariables()[i].getName();
 
-      Iterator iterator = Iterator::make(name, tensorVar, i,
-                                         format.getDimensionTypes()[i],
-                                         format.getDimensionOrder()[i],
-                                         parent, tensor);
-      taco_iassert(path.getStep(i).getStep() == i);
-      iterators.insert({path.getStep(i), iterator});
-      parent = iterator;
+          Iterator iterator = Iterator::make(name, tensorVar, i,
+                                             format.getDimensionTypes()[i],
+                                             format.getDimensionOrder()[i],
+                                             parent, tensor);
+          taco_iassert(path.getStep(i).getStep() == i);
+          iteratorPack.push_back(iterator);
+          iterators.insert({path.getStep(i), iterator});
+          parent = iterator;
+        }
+        IteratorPack::make(iteratorPack);
+      }
     }
   }
 
@@ -54,16 +63,23 @@ Iterators::Iterators(const IterationSchedule& schedule,
     storage::Iterator parent = Iterator::makeRoot(tensorVar);
     roots.insert({resultPath, parent});
 
-    for (int i=0; i < (int)tensor.getOrder(); ++i) {
-      IndexVar var = tensor.getIndexVars()[i];
-      string name = var.getName();
-      Iterator iterator = Iterator::make(name, tensorVar, i,
-                                         format.getDimensionTypes()[i],
-                                         format.getDimensionOrder()[i],
-                                         parent, tensor);
-      taco_iassert(resultPath.getStep(i).getStep() == i);
-      iterators.insert({resultPath.getStep(i), iterator});
-      parent = iterator;
+    const auto& packBoundaries = format.getDimensionPackBoundaries();
+    if (!packBoundaries.empty()) {
+      for (size_t j = 0; j < packBoundaries.size() - 1; ++j) {
+        std::vector<Iterator> iteratorPack;
+        for (int i = packBoundaries[j]; i < packBoundaries[j + 1]; ++i) {
+          string name = resultPath.getVariables()[i].getName();
+          Iterator iterator = Iterator::make(name, tensorVar, i,
+                                             format.getDimensionTypes()[i],
+                                             format.getDimensionOrder()[i],
+                                             parent, tensor);
+          taco_iassert(resultPath.getStep(i).getStep() == i);
+          iteratorPack.push_back(iterator);
+          iterators.insert({resultPath.getStep(i), iterator});
+          parent = iterator;
+        }
+        IteratorPack::make(iteratorPack);
+      }
     }
   }
 }

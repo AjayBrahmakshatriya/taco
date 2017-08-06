@@ -14,13 +14,18 @@ Format::Format() {
 Format::Format(const DimensionType& dimensionType) {
   this->dimensionTypes.push_back(dimensionType);
   this->dimensionOrder.push_back(0);
+  this->dimensionPackBoundaries.push_back(0);
+  this->dimensionPackBoundaries.push_back(1);
 }
 
 Format::Format(const std::vector<DimensionType>& dimensionTypes) {
   this->dimensionTypes = dimensionTypes;
   this->dimensionOrder.resize(dimensionTypes.size());
+  this->dimensionPackBoundaries.resize(dimensionTypes.size() + 1);
+  this->dimensionPackBoundaries[0] = 0;
   for (size_t i=0; i < dimensionTypes.size(); ++i) {
     this->dimensionOrder[i] = i;
+    this->dimensionPackBoundaries[i + 1] = i + 1;
   }
 }
 
@@ -30,6 +35,21 @@ Format::Format(const std::vector<DimensionType>& dimensionTypes,
       "You must either provide a complete dimension ordering or none";
   this->dimensionTypes = dimensionTypes;
   this->dimensionOrder = dimensionOrder;
+  this->dimensionPackBoundaries.resize(dimensionTypes.size() + 1);
+  this->dimensionPackBoundaries[0] = 0;
+  for (size_t i = 0; i < dimensionTypes.size(); ++i) {
+    this->dimensionPackBoundaries[i + 1] = i + 1;
+  }
+}
+
+Format::Format(const std::vector<DimensionType>& dimensionTypes,
+               const std::vector<int>& dimensionOrder,
+               const std::vector<int>& dimensionPackBoundaries) {
+  taco_uassert(dimensionTypes.size() == dimensionOrder.size()) <<
+      "You must either provide a complete dimension ordering or none";
+  this->dimensionTypes = dimensionTypes;
+  this->dimensionOrder = dimensionOrder;
+  this->dimensionPackBoundaries = dimensionPackBoundaries;
 }
 
 size_t Format::getOrder() const {
@@ -45,14 +65,26 @@ const std::vector<int>& Format::getDimensionOrder() const {
   return this->dimensionOrder;
 }
 
+const std::vector<int>& Format::getDimensionPackBoundaries() const {
+  return this->dimensionPackBoundaries;
+}
+
 bool operator==(const Format& a, const Format& b){
-  auto aDimTypes = a.getDimensionTypes();
-  auto bDimTypes = b.getDimensionTypes();
-  auto aDimOrder = a.getDimensionOrder();
-  auto bDimOrder = b.getDimensionOrder();
-  if (aDimTypes.size() == bDimTypes.size()) {
+  auto& aDimTypes = a.getDimensionTypes();
+  auto& bDimTypes = b.getDimensionTypes();
+  auto& aDimOrder = a.getDimensionOrder();
+  auto& bDimOrder = b.getDimensionOrder();
+  auto& aDimPackBoundaries = a.getDimensionPackBoundaries();
+  auto& bDimPackBoundaries = b.getDimensionPackBoundaries();
+  if (aDimTypes.size() == bDimTypes.size() && 
+      aDimPackBoundaries.size() == bDimPackBoundaries.size()) {
     for (size_t i = 0; i < aDimTypes.size(); i++) {
       if ((aDimTypes[i] != bDimTypes[i]) || (aDimOrder[i] != bDimOrder[i])) {
+        return false;
+      }
+    }
+    for (size_t i = 0; i < aDimPackBoundaries.size(); i++) {
+      if (aDimPackBoundaries[i] != bDimPackBoundaries[i]) {
         return false;
       }
     }

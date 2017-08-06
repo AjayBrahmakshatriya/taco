@@ -19,8 +19,6 @@
 #include "taco/storage/array_util.h"
 #include "taco/util/strings.h"
 
-#define AOS 0
-
 using namespace std;
 
 namespace taco {
@@ -63,33 +61,18 @@ Iterator Iterator::make(string name, const ir::Expr& tensorVar,
       break;
     }
     case DimensionType::Uncompressed: {
-#if AOS
-      iterator.iterator =
-          std::make_shared<UncompressedAosIterator>(name, tensorVar, dim, parent);
-#else
       iterator.iterator =
           std::make_shared<UncompressedIterator>(name, tensorVar, dim, parent);
-#endif
       break;
     }
     case DimensionType::Coordinate: {
-#if AOS
-      iterator.iterator =
-          std::make_shared<CoordinateAosIterator>(name, tensorVar, dim, parent);
-#else
       iterator.iterator =
           std::make_shared<CoordinateIterator>(name, tensorVar, dim, parent);
-#endif
       break;
     }
     case DimensionType::Unique: {
-#if AOS
-      iterator.iterator =
-          std::make_shared<UniqueAosIterator>(name, tensorVar, dim, parent);
-#else
       iterator.iterator =
           std::make_shared<UniqueIterator>(name, tensorVar, dim, parent);
-#endif
       break;
     }
   }
@@ -97,9 +80,19 @@ Iterator Iterator::make(string name, const ir::Expr& tensorVar,
   return iterator;
 }
 
+const IteratorPack& Iterator::getPack() const {
+  taco_iassert(defined());
+  return iterator->getPack();
+}
+
 const Iterator& Iterator::getParent() const {
   taco_iassert(defined());
   return iterator->getParent();
+}
+
+ir::Expr Iterator::getTensor() const {
+  taco_iassert(defined());
+  return iterator->getTensor();
 }
 
 bool Iterator::isDense() const {
@@ -136,11 +129,6 @@ bool Iterator::hasDuplicates() const {
 ir::Expr Iterator::getRangeSize() const {
   taco_iassert(defined());
   return iterator->getRangeSize();
-}
-
-ir::Expr Iterator::getTensor() const {
-  taco_iassert(defined());
-  return iterator->getTensor();
 }
 
 ir::Expr Iterator::getPtrVar() const {
@@ -207,6 +195,19 @@ bool Iterator::defined() const {
   return iterator != nullptr;
 }
 
+void Iterator::setPack(IteratorPack pack) {
+  taco_iassert(defined());
+  return iterator->setPack(pack); 
+}
+
+bool operator==(const Iterator& a, const IteratorImpl* b) {
+  return a.iterator.get() == b;
+}
+
+bool operator!=(const Iterator& a, const IteratorImpl* b) {
+  return !(a == b);
+}
+
 bool operator==(const Iterator& a, const Iterator& b) {
   return a.iterator == b.iterator;
 }
@@ -223,6 +224,49 @@ std::ostream& operator<<(std::ostream& os, const Iterator& iterator) {
 }
 
 
+// class IteratorPack
+struct IteratorPack::Content {
+  Content(const std::vector<Iterator> iterators) : iterators(iterators) {}
+  
+  std::vector<Iterator> iterators;
+};
+
+IteratorPack::IteratorPack() {
+}
+
+IteratorPack IteratorPack::make(std::vector<Iterator> iterators) {
+  IteratorPack pack;
+  pack.content = std::make_shared<Content>(iterators);
+
+  for (auto& iterator : iterators) {
+    iterator.setPack(pack);
+  }
+
+  return pack;
+}
+
+size_t IteratorPack::getSize() const {
+  return content->iterators.size();
+}
+
+Iterator IteratorPack::getFirstIterator() const {
+  return content->iterators.front();
+}
+
+Iterator IteratorPack::getLastIterator() const {
+  return content->iterators.back();
+}
+
+size_t IteratorPack::getPosition(const IteratorImpl* iter) const {
+  for (size_t i = 0; i < content->iterators.size(); ++i) {
+    if (content->iterators[i] == iter) {
+      return i;
+    }
+  }
+  taco_iassert(false);
+  return 0;
+}
+
 // class IteratorImpl
 IteratorImpl::IteratorImpl(Iterator parent, ir::Expr tensor) :
     parent(parent), tensor(tensor) {
@@ -235,12 +279,20 @@ std::string IteratorImpl::getName() const {
   return util::toString(tensor);
 }
 
+const IteratorPack& IteratorImpl::getPack() const {
+  return pack;
+}
+
 const Iterator& IteratorImpl::getParent() const {
   return parent;
 }
 
 const ir::Expr& IteratorImpl::getTensor() const {
   return tensor;
+}
+
+void IteratorImpl::setPack(IteratorPack pack) {
+  this->pack = pack;
 }
 
 std::ostream& operator<<(std::ostream& os, const IteratorImpl& iterator) {

@@ -73,12 +73,14 @@ Expr UncompressedIterator::end() const {
 }
 
 Expr UncompressedIterator::getIdx(ir::Expr pos) const {
-  return Load::make(getIdxArr(), pos);
+  Expr stride = (int)getPack().getSize();
+  Expr loc = Mul::make(pos, stride);
+
+  return Load::make(getIdxArr(), loc);
 }
 
 Stmt UncompressedIterator::initDerivedVars() const {
-  return VarAssign::make(getIdxVar(), Load::make(getIdxArr(), getPtrVar()),
-                         true);
+  return VarAssign::make(getIdxVar(), getIdx(getPtrVar()), true);
 }
 
 ir::Stmt UncompressedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
@@ -100,10 +102,16 @@ ir::Stmt UncompressedIterator::storePtr(ir::Expr ptr, ir::Expr start) const {
 }
 
 ir::Stmt UncompressedIterator::storeIdx(ir::Expr idx) const {
-  Stmt storeIdx = Store::make(getIdxArr(), getPtrVar(), idx);
+  Expr stride = (int)getPack().getSize();
+  Expr loc = Mul::make(getPtrVar(), stride);
+  Stmt storeIdx = Store::make(getIdxArr(), loc, idx);
 
-  Expr shouldResize = Lte::make(getIdxCapacity(), getPtrVar());
-  Expr newCapacity = Mul::make(2, getPtrVar());
+  if (getPack().getLastIterator() != this) {
+    return storeIdx;
+  }
+
+  Expr shouldResize = Lte::make(getIdxCapacity(), loc);
+  Expr newCapacity = Mul::make(2, loc);
   Stmt updateCapacity = VarAssign::make(getIdxCapacity(), newCapacity);
   Stmt resizeIdx = Allocate::make(getIdxArr(), getIdxCapacity(), true);
   Stmt body = Block::make({updateCapacity, resizeIdx});
@@ -114,10 +122,15 @@ ir::Stmt UncompressedIterator::storeIdx(ir::Expr idx) const {
 
 ir::Stmt UncompressedIterator::initStorage(ir::Expr size) const {
   Stmt initPosCapacity = VarAssign::make(getPosCapacity(), size, true);
-  Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
   Stmt allocPosArr = Allocate::make(getPtrArr(), getPosCapacity());
-  Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
   Stmt initPosArr = Store::make(getPtrArr(), 0, 0);
+
+  if (getPack().getLastIterator() != this) {
+    return Block::make({initPosCapacity, allocPosArr, initPosArr});
+  }
+
+  Stmt initIdxCapacity = VarAssign::make(getIdxCapacity(), size, true);
+  Stmt allocIdxArr = Allocate::make(getIdxArr(), getIdxCapacity());
 
   return Block::make({initPosCapacity, initIdxCapacity, allocPosArr, 
                       allocIdxArr, initPosArr});
@@ -150,6 +163,7 @@ ir::Expr UncompressedIterator::getIndex(int index) const {
       return GetProperty::make(tensor, TensorProperty::Indices, level, 1, name);
     }
     default:
+      taco_iassert(false);
       break;
   }
   return Expr();
