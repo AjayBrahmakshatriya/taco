@@ -7,9 +7,6 @@
 #include "uncompressed_iterator.h"
 #include "coordinate_iterator.h"
 #include "unique_iterator.h"
-#include "uncompressed_aos_iterator.h"
-#include "coordinate_aos_iterator.h"
-#include "unique_aos_iterator.h"
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
