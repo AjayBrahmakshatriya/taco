@@ -63,11 +63,15 @@ IterationSchedule IterationSchedule::make(const TensorBase& tensor) {
 
       // copy index variables to path
       vector<IndexVar> path(op->indexVars.size());
+      vector<int> accessOrder(op->indexVars.size());
       for (size_t i=0; i < op->indexVars.size(); ++i) {
-        path[i] = op->indexVars[format.getDimensionOrder()[i]];
+        accessOrder[i] = format.getDimensionOrder()[op->accessOrder[i]];
+        path[i] = op->indexVars[accessOrder[i]];
+        //std::cout << "idx = " << op->accessOrder[i] << std::endl;
+        //std::cout << path[i] << std::endl;
       }
 
-      auto tensorPath = TensorPath(op->tensor, path);
+      auto tensorPath = TensorPath(op->tensor, path, accessOrder);
       mapReadNodesToPaths.insert({op, tensorPath});
       tensorPaths.push_back(tensorPath);
     }

@@ -76,7 +76,6 @@ Expr UniqueIterator::getIdx(ir::Expr pos) const {
   Expr offset = (int)getPack().getPosition(this);
   Expr loc = Add::make(Mul::make(pos, stride), offset);
 
-  //std::cout << getIdxArr().defined() << std::endl;
   return Load::make(getIdxArr(), loc);
 }
 

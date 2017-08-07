@@ -533,8 +533,9 @@ void TensorBase::setExpr(const vector<IndexVar>& indexVars, IndexExpr expr) {
 
   // The following are index expressions the implementation doesn't currently
   // support, but that are planned for the future.
-  taco_uassert(!error::containsTranspose(this->getFormat(), indexVars, expr))
-      << error::expr_transposition;
+  // TODO: Fix this check
+  //taco_uassert(!error::containsTranspose(this->getFormat(), indexVars, expr))
+  //    << error::expr_transposition;
   taco_uassert(!error::containsDistribution(indexVars, expr))
       << error::expr_distribution;
 

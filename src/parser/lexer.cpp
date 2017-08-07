@@ -40,6 +40,9 @@ Token Lexer::getToken() {
     case ',':
       token = Token::comma;
       break;
+    case ';':
+      token = Token::semicolon;
+      break;
     case '(':
       token = Token::lparen;
       break;

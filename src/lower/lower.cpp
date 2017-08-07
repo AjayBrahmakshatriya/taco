@@ -5,6 +5,8 @@
 #include <set>
 #include <map>
 #include <list>
+#include <queue>
+#include <utility>
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -64,6 +66,10 @@ struct Context {
   set<Iterator>        fusedIteratorsHead;
 
   set<Iterator>        fusedIterators;
+
+  set<Iterator>        visitedIterators;
+
+  map<Iterator,vector<pair<Iterator,Stmt>>> deferredIterators;
 };
 
 struct Target {
@@ -423,6 +429,7 @@ static vector<Stmt> lower(const Target&    target,
     auto lpIterators = lp.getIterators();
 
     vector<Stmt> loopBody;
+    set<Iterator> visitedIterators;
 
     // Emit code to initialize sequential access idx variables:
     // int kB = B1_idx_arr[B1_pos];
@@ -430,8 +437,12 @@ static vector<Stmt> lower(const Target&    target,
     vector<Expr> mergeIdxVariables;
     auto sequentialAccessIterators = getSequentialAccessIterators(lpIterators);
     for (Iterator& iterator : sequentialAccessIterators) {
+      ctx.visitedIterators.insert(iterator);
+      visitedIterators.insert(iterator);
+
       Stmt initIdx = iterator.initDerivedVar();
       loopBody.push_back(initIdx);
+
       mergeIdxVariables.push_back(iterator.getIdxVar());
     }
 
@@ -449,11 +460,47 @@ static vector<Stmt> lower(const Target&    target,
       Expr val = Add::make(Mul::make(iterator.getParent().getPtrVar(),
                                      iterator.end()), idx);
       Stmt initPos = VarAssign::make(iterator.getPtrVar(), val, true);
-      loopBody.push_back(initPos);
+      
+      if (util::contains(ctx.visitedIterators, iterator.getParent())) {
+        std::queue<std::pair<Iterator,Stmt>> deferredIterators;
+        deferredIterators.push(std::make_pair(iterator, initPos));
+
+        while (!deferredIterators.empty()) {
+          loopBody.push_back(deferredIterators.front().second);
+
+          const auto& curIterator = deferredIterators.front().first;
+          ctx.visitedIterators.insert(curIterator);
+          visitedIterators.insert(curIterator);
+          
+          if (util::contains(ctx.deferredIterators, curIterator)) {
+            for (const auto& deferred : ctx.deferredIterators[curIterator]) {
+              if (!util::contains(ctx.visitedIterators, deferred.first)) {
+                deferredIterators.push(deferred);
+              }
+            }
+
+            ctx.deferredIterators.erase(curIterator);
+          }
+          
+          deferredIterators.pop();
+        }
+      } else {
+        if (!util::contains(ctx.deferredIterators, iterator.getParent())) {
+          ctx.deferredIterators[iterator.getParent()] = 
+              std::vector<std::pair<Iterator,Stmt>>();
+        }
+        ctx.deferredIterators[iterator.getParent()].push_back(
+            std::make_pair(iterator, initPos));
+      }
     }
 
     // Emit code to initialize (pos_)end variables:
-    for (Iterator& iterator : lpIterators) {
+    for (const Iterator& iterator : visitedIterators) {
+      // Skip result iterator
+      if (iterator == resultIterator) {
+        continue;
+      }
+
       Expr val = Add::make(iterator.getPtrVar(), 1);
       Stmt initEnd = VarAssign::make(iterator.getEndVar(), val, true);
       loopBody.push_back(initEnd);
@@ -756,6 +803,12 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
   // Lower the iteration schedule
   auto& roots = ctx.schedule.getRoots();
 
+  for (const auto& tensorPath : ctx.schedule.getTensorPaths()) {
+    const Iterator& root = ctx.iterators.getRoot(tensorPath);
+    ctx.visitedIterators.insert(root);
+  }
+  ctx.visitedIterators.insert(ctx.iterators.getRoot(resultPath));
+
   // Lower tensor expressions
   if (roots.size() > 0) {
     Iterator resultIterator = (resultPath.getSize() > 0)
@@ -876,6 +929,8 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
       body.push_back(compute);
     }
   }
+
+  taco_iassert(ctx.deferredIterators.empty());
 
   if (!init.empty()) {
     init.push_back(BlankLine::make());

@@ -22,12 +22,16 @@ class TensorPath : public util::Comparable<TensorPath> {
 public:
   TensorPath();
   TensorPath(const TensorBase& tensor, const std::vector<IndexVar>& path);
+  TensorPath(const TensorBase& tensor, const std::vector<IndexVar>& path,
+             const std::vector<int>& accessOrder);
 
   /// Returns the tensor whose read created a path in the iteration schedule.
   const TensorBase& getTensor() const;
 
   /// Returns the variables along the path.
   const std::vector<IndexVar>& getVariables() const;
+
+  const std::vector<int>& getAccessOrder() const;
 
   /// Returns the size (number of steps) of the path.
   size_t getSize() const;

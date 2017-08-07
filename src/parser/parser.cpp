@@ -221,6 +221,7 @@ Access Parser::parseAccess() {
   consume(Token::identifier);
 
   vector<IndexVar> varlist;
+  vector<int> accessOrder;
   if (content->currentToken == Token::underscore) {
     consume(Token::underscore);
     if (content->currentToken == Token::lcurly) {
@@ -235,6 +236,16 @@ Access Parser::parseAccess() {
   else if (content->currentToken == Token::lparen) {
     consume(Token::lparen);
     varlist = parseVarList();
+    if (content->currentToken == Token::semicolon) {
+      consume(Token::semicolon);
+      accessOrder.push_back(atoi(content->lexer.getIdentifier().c_str()));
+      consume(Token::scalar);
+      while (content->currentToken == Token::comma) {
+        consume(Token::comma);
+        accessOrder.push_back(atoi(content->lexer.getIdentifier().c_str()));
+        consume(Token::scalar);
+      }
+    }
     consume(Token::rparen);
   }
 
@@ -284,7 +295,8 @@ Access Parser::parseAccess() {
 
     content->tensors.insert({tensorName,tensor});
   }
-  return Access(tensor, varlist);
+  return accessOrder.empty() ? Access(tensor, varlist) : 
+         Access(tensor, varlist, accessOrder);
 }
 
 vector<IndexVar> Parser::parseVarList() {

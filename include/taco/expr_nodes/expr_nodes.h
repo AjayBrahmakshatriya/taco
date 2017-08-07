@@ -2,6 +2,7 @@
 #define TACO_EXPR_NODES_H
 
 #include <vector>
+#include <numeric>
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -13,7 +14,13 @@ namespace expr_nodes {
 
 struct ReadNode : public ExprNode {
   ReadNode(TensorBase tensor, const std::vector<IndexVar>& indices) :
-      tensor(tensor), indexVars(indices) {}
+      tensor(tensor), indexVars(indices) {
+    accessOrder.resize(indexVars.size());
+    std::iota(accessOrder.begin(), accessOrder.end(), 0);
+  }
+  ReadNode(TensorBase tensor, const std::vector<IndexVar>& indices,
+           const std::vector<int>& accessOrder) :
+      tensor(tensor), indexVars(indices), accessOrder(accessOrder) {}
 
   void accept(ExprVisitorStrict* v) const {
     v->visit(this);
@@ -25,6 +32,7 @@ struct ReadNode : public ExprNode {
 
   TensorBase tensor;
   std::vector<IndexVar> indexVars;
+  std::vector<int> accessOrder;
 };
 
 struct ImmExprNode : public ExprNode {

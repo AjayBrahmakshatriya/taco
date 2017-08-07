@@ -18,15 +18,24 @@ namespace lower {
 struct TensorPath::Content {
   TensorBase  tensor;
   vector<IndexVar> vars;
+  vector<int> accessOrder;
 };
 
 TensorPath::TensorPath() : content(nullptr) {
 }
 
-TensorPath::TensorPath(const TensorBase& tensor, const vector<IndexVar>& vars)
+TensorPath::TensorPath(const TensorBase& tensor, const vector<IndexVar>& vars)  
     : content(new TensorPath::Content) {
   content->tensor = tensor;
   content->vars   = vars;
+}
+
+TensorPath::TensorPath(const TensorBase& tensor, const vector<IndexVar>& vars, 
+                       const vector<int>& accessOrder)
+    : content(new TensorPath::Content) {
+  content->tensor = tensor;
+  content->vars   = vars;
+  content->accessOrder = accessOrder;
 }
 
 const TensorBase& TensorPath::getTensor() const {
@@ -35,6 +44,10 @@ const TensorBase& TensorPath::getTensor() const {
 
 const std::vector<IndexVar>& TensorPath::getVariables() const {
   return content->vars;
+}
+
+const std::vector<int>& TensorPath::getAccessOrder() const {
+  return content->accessOrder;
 }
 
 size_t TensorPath::getSize() const {

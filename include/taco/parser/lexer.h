@@ -10,6 +10,7 @@ enum class Token {
   identifier,
   scalar,
   comma,
+  semicolon,
   lparen,
   rparen,
   underscore,

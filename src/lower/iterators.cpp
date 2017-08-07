@@ -1,6 +1,8 @@
 #include "iterators.h"
 
 #include <iostream>
+#include <iterator>
+#include <algorithm>
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -34,19 +36,29 @@ Iterators::Iterators(const IterationSchedule& schedule,
 
     const auto& packBoundaries = format.getDimensionPackBoundaries();
     if (!packBoundaries.empty()) {
+      const auto& accessOrder = path.getAccessOrder();
+      for (size_t i = 0; i < path.getSize(); ++i) {
+        const int j = format.getDimensionOrder()[i];
+        const auto pos = std::find(accessOrder.begin(), accessOrder.end(), j);
+        const auto idx = std::distance(accessOrder.begin(), pos);
+        
+        const string name = path.getVariables()[idx].getName();
+        //std::cout << "name = " << name << std::endl;
+        Iterator iterator = Iterator::make(name, tensorVar, i,
+                                           format.getDimensionTypes()[idx],
+                                           format.getDimensionOrder()[idx],
+                                           parent, tensor);
+        taco_iassert(path.getStep(idx).getStep() == idx);
+        iterators.insert({path.getStep(idx), iterator});
+
+        parent = iterator;
+      }
+
       for (size_t j = 0; j < packBoundaries.size() - 1; ++j) {
         std::vector<Iterator> iteratorPack;
         for (int i = packBoundaries[j]; i < packBoundaries[j + 1]; ++i) {
-          string name = path.getVariables()[i].getName();
-
-          Iterator iterator = Iterator::make(name, tensorVar, i,
-                                             format.getDimensionTypes()[i],
-                                             format.getDimensionOrder()[i],
-                                             parent, tensor);
-          taco_iassert(path.getStep(i).getStep() == i);
-          iteratorPack.push_back(iterator);
-          iterators.insert({path.getStep(i), iterator});
-          parent = iterator;
+          const int idx = format.getDimensionOrder()[i];
+          iteratorPack.push_back(iterators[path.getStep(idx)]);
         }
         IteratorPack::make(iteratorPack);
       }

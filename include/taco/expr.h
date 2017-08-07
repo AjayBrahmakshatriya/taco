@@ -77,6 +77,8 @@ public:
   Access() = default;
   Access(const Node* n);
   Access(const TensorBase& tensor, const std::vector<IndexVar>& indices={});
+  Access(const TensorBase& tensor, const std::vector<IndexVar>& indices, 
+         const std::vector<int>& acessOrder);
 
   const TensorBase &getTensor() const;
   const std::vector<IndexVar>& getIndexVars() const;

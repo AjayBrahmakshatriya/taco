@@ -106,6 +106,7 @@ protected:
       varMap[op] = CodeGen_C::genUniqueName(op->name);
       if (!inVarAssignLHSWithDecl) {
         varDecls[op] = varMap[op];
+        taco_iassert(false);
       }
     }
   }
