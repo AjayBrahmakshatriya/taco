@@ -183,27 +183,25 @@ static IndexExpr emitAvailableExprs(const IndexVar& indexVar,
 
 static void emitComputeExpr(const Target& target, const IndexVar& indexVar,
                             const IndexExpr& indexExpr, const Context& ctx,
-                            vector<Stmt>& stmts) {
+                            const bool doReduce, vector<Stmt>& stmts) {
   Expr expr = lowerToScalarExpression(indexExpr, ctx.iterators,
                                       ctx.schedule, ctx.temporaries, stmts);
   if (target.pos.defined()) {
-    Stmt store = ctx.schedule.hasReductionVariableAncestor(indexVar) 
-        ? compoundStore(target.tensor, target.pos, expr)
-        :   Store::make(target.tensor, target.pos, expr);
+    Stmt store = doReduce ? compoundStore(target.tensor, target.pos, expr)
+        : Store::make(target.tensor, target.pos, expr);
     stmts.push_back(store);
   }
   else {
-    Stmt assign = ctx.schedule.hasReductionVariableAncestor(indexVar) 
-        ?  compoundAssign(target.tensor, expr)
+    Stmt assign = doReduce ? compoundAssign(target.tensor, expr)
         : VarAssign::make(target.tensor, expr);
     stmts.push_back(assign);
   }
+  //std::cout << expr << " " << ctx.schedule.hasReductionVariableAncestor(indexVar) << std::endl;
 }
 
 static LoopKind doParallelize(const IndexVar& indexVar, const Expr& tensor, 
                               const Context& ctx) {
-  if (ctx.schedule.getAncestors(indexVar).size() != 1 ||
-      ctx.schedule.isReduction(indexVar)) {
+  if (ctx.schedule.isReduction(indexVar)) {
     return LoopKind::Serial;
   }
 
@@ -344,7 +342,16 @@ static void mergeIterators(Context& ctx, const IndexExpr& indexExpr) {
 
     for (int step = (int)tensorPath.getSize() - 1; step >= 0; --step) {
       const TensorPathStep tensorStep = tensorPath.getStep(step);
-      Iterator iterator = ctx.iterators[tensorStep];
+      const Iterator iterator = ctx.iterators[tensorStep];
+      const IndexVar& indexVar = tensorPath.getVariables()[step];
+
+      //std::cout << isGather << " " << indexVar << " " << lastResultVar << " " 
+      //          << iterator.hasDuplicates() << " " << lastResultIterator.hasDuplicates() << std::endl;
+      if (isGather && indexVar == lastResultVar && 
+          iterator.hasDuplicates() && !lastResultIterator.hasDuplicates()) {
+        //fusedIterator.clear();
+        //continue;
+      }
 
       if (!iterator.isOnlyChild()) {
         if (!fusedIterator.empty()) {
@@ -354,17 +361,10 @@ static void mergeIterators(Context& ctx, const IndexExpr& indexExpr) {
         continue;
       }
 
-      const IndexVar& indexVar = tensorPath.getVariables()[step];
       const MergeLattice lattice = MergeLattice::make(
           indexExpr, indexVar, ctx.schedule, ctx.iterators);
      
       if (needsMerge(lattice)) {
-        fusedIterator.clear();
-        continue;
-      }
-
-      if (isGather && indexVar == lastResultVar && 
-          iterator.hasDuplicates() && !lastResultIterator.hasDuplicates()) {
         fusedIterator.clear();
         continue;
       }
@@ -457,9 +457,11 @@ static vector<Stmt> lower(const Target&    target,
     auto randomAccessIterators =
         getRandomAccessIterators(util::combine(lpIterators, {resultIterator}));
     for (Iterator& iterator : randomAccessIterators) {
-      Expr val = Add::make(Mul::make(iterator.getParent().getPtrVar(),
-                                     iterator.end()), idx);
-      Stmt initPos = VarAssign::make(iterator.getPtrVar(), val, true);
+      Stmt initPos = !iterator.isDense() ? iterator.initDerivedVar() : [&]() {
+          Expr val = Add::make(Mul::make(iterator.getParent().getPtrVar(),
+                                         iterator.end()), idx);
+          return VarAssign::make(iterator.getPtrVar(), val, true);
+      }();
       
       if (util::contains(ctx.visitedIterators, iterator.getParent())) {
         std::queue<std::pair<Iterator,Stmt>> deferredIterators;
@@ -623,7 +625,11 @@ static vector<Stmt> lower(const Target&    target,
       // Emit code to compute and store/assign result 
       if (emitCompute &&
           (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
-        emitComputeExpr(target, indexVar, lqExpr, ctx, caseBody);
+        const Iterator iter = lq.getRangeIterators().front();
+        const bool doReduce = (iter.hasDuplicates() && 
+            (isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) || 
+            (ctx.schedule.hasReductionVariableAncestor(indexVar) && !(isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) ;
+        emitComputeExpr(target, indexVar, lqExpr, ctx, doReduce, caseBody);
       }
 
       // Emit code to increment the result `pos` variable and to allocate

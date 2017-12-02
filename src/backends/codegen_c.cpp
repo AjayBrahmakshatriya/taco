@@ -30,6 +30,7 @@ const string cHeaders = "#ifndef TACO_C_HEADERS\n"
                  "#include <stdint.h>\n"
                  "#include <math.h>\n"
                  "#define TACO_MIN(_a,_b) ((_a) < (_b) ? (_a) : (_b))\n"
+                 "#define TACO_MAX(_a,_b) ((_a) < (_b) ? (_a) : (_b))\n"
                  "#ifndef TACO_TENSOR_T_DEFINED\n"
                  "#define TACO_TENSOR_T_DEFINED\n"
                  "typedef enum { taco_dim_dense, taco_dim_sparse } taco_dim_t;\n"
@@ -106,7 +107,7 @@ protected:
       varMap[op] = CodeGen_C::genUniqueName(op->name);
       if (!inVarAssignLHSWithDecl) {
         varDecls[op] = varMap[op];
-        taco_iassert(false);
+        //taco_iassert(false);
       }
     }
   }
@@ -216,6 +217,8 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   if ((tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Dense &&
        op->property == TensorProperty::Dimensions) ||
       (tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Fixed &&
+       op->property == TensorProperty::Dimensions) ||
+      (tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Banded &&
        op->property == TensorProperty::Dimensions)) {
     tp = "int";
     ret << tp << " " << varname << " = *(int*)("
@@ -651,7 +654,14 @@ void CodeGen_C::visit(const Min* op) {
   for (size_t i=0; i<op->operands.size()-1; i++) {
     stream << ")";
   }
+}
 
+void CodeGen_C::visit(const Max* op) {
+  stream << "TACO_MAX(";
+  op->a.accept(this);
+  stream << ", ";
+  op->b.accept(this);
+  stream << ")";
 }
 
 void CodeGen_C::visit(const Allocate* op) {

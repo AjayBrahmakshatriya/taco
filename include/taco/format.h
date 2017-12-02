@@ -14,7 +14,9 @@ enum DimensionType {
   Fixed,        // e.g. second dimension in ELL
   Uncompressed,
   Coordinate,
-  Unique
+  Unique,
+  Banded,
+  Offset
 };
 
 class Format {

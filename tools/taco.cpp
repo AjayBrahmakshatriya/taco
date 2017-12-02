@@ -253,6 +253,12 @@ int main(int argc, char* argv[]) {
             case 'q':
               levelTypes.push_back(DimensionType::Unique);
               break;
+            case 'b':
+              levelTypes.push_back(DimensionType::Banded);
+              break;
+            case 'o':
+              levelTypes.push_back(DimensionType::Offset);
+              break;
             default:
               return reportError("Incorrect format descriptor", 3);
               break;

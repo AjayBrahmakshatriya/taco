@@ -82,7 +82,7 @@ Expr DenseIterator::getIdx(Expr pos) const {
 Stmt DenseIterator::initDerivedVars() const {
   Expr ptrVal = Add::make(Mul::make(getParent().getPtrVar(), end()),
                           getIdxVar());
-  return VarAssign::make(getPtrVar(), ptrVal);
+  return VarAssign::make(getPtrVar(), ptrVal, true);
 }
 
 ir::Stmt DenseIterator::storePtr(ir::Expr ptr, ir::Expr start) const {

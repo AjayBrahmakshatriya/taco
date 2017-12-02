@@ -7,6 +7,8 @@
 #include "uncompressed_iterator.h"
 #include "coordinate_iterator.h"
 #include "unique_iterator.h"
+#include "banded_iterator.h"
+#include "offset_iterator.h"
 
 #include "taco/tensor.h"
 #include "taco/expr.h"
@@ -70,6 +72,18 @@ Iterator Iterator::make(string name, const ir::Expr& tensorVar,
     case DimensionType::Unique: {
       iterator.iterator =
           std::make_shared<UniqueIterator>(name, tensorVar, dim, parent);
+      break;
+    }
+    case DimensionType::Banded: {
+      size_t dimSize = tensor.getDimensions()[dimOrder];
+      iterator.iterator =
+          std::make_shared<BandedIterator>(name, tensorVar, dim, dimSize,
+                                          parent);
+      break;
+    }
+    case DimensionType::Offset: {
+      iterator.iterator =
+          std::make_shared<OffsetIterator>(name, tensorVar, dim, parent);
       break;
     }
   }
