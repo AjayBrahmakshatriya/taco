@@ -626,6 +626,7 @@ static vector<Stmt> lower(const Target&    target,
       if (emitCompute &&
           (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
         const Iterator iter = lq.getRangeIterators().front();
+        // TODO: Fix this (e.g. CSB SpMV_T)
         const bool doReduce = (iter.hasDuplicates() && 
             (isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) || 
             (ctx.schedule.hasReductionVariableAncestor(indexVar) && !(isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) ;
