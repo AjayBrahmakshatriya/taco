@@ -18,7 +18,8 @@ enum Property {
   Assemble,
   Compute,
   Print,
-  Comment
+  Comment,
+  FuseIterators
 };
 
 /// Lower the tensor object with a defined expression and an iteration schedule

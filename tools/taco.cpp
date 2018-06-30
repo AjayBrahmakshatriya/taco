@@ -92,10 +92,13 @@ static void printUsageInfo() {
             "Specify the format of a tensor in the expression. Formats are "
             "specified per dimension using d (dense) and s (sparse). "
             "All formats default to dense. "
-            "Examples: A:ds, b:d and D:sss.");
+            "Examples: A:d,s, b:d and D:s,s,s.");
   cout << endl;
   printFlag("c",
             "Generate compute kernel that simultaneously does assembly.");
+  cout << endl;
+  printFlag("m",
+            "Perform iterator fusion if applicable.");
   cout << endl;
   printFlag("i=<tensor>:<filename>",
             "Read a tensor from a file " + fileFormats + ".");
@@ -175,6 +178,7 @@ int main(int argc, char* argv[]) {
   }
 
   bool computeWithAssemble = false;
+  bool fuseIterators       = false;
   bool printCompute        = false;
   bool printAssemble       = false;
   bool printLattice        = false;
@@ -290,6 +294,9 @@ int main(int argc, char* argv[]) {
     }
     else if ("-c" == argName) {
       computeWithAssemble = true;
+    }
+    else if ("-m" == argName) {
+      fuseIterators = true;
     }
     else if ("-g" == argName) {
       vector<string> descriptor = util::split(argValue, ":");
@@ -496,7 +503,7 @@ int main(int argc, char* argv[]) {
 
   if (evaluate) {
     if (time) cout << endl;
-    TOOL_BENCHMARK_TIMER(tensor.compile(computeWithAssemble),
+    TOOL_BENCHMARK_TIMER(tensor.compile(computeWithAssemble, fuseIterators),
                          "Compile: ",compileTime);
     TOOL_BENCHMARK_TIMER(tensor.assemble(),"Assemble:",assembleTime);
     if (repeat == 1) {
@@ -556,7 +563,7 @@ int main(int argc, char* argv[]) {
     }
   }
   else {
-    TOOL_BENCHMARK_TIMER(tensor.compile(computeWithAssemble),
+    TOOL_BENCHMARK_TIMER(tensor.compile(computeWithAssemble, fuseIterators),
                          "Compile: ",compileTime);
   }
 

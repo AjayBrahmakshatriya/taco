@@ -367,7 +367,7 @@ Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
   return Access(*this, indices);
 }
 
-void TensorBase::compile(bool assembleWhileCompute) {
+void TensorBase::compile(bool assembleWhileCompute, bool fuseIterators) {
   taco_uassert(getExpr().defined()) << error::compile_without_expr;
 
   std::set<lower::Property> assembleProperties, computeProperties;
@@ -378,6 +378,9 @@ void TensorBase::compile(bool assembleWhileCompute) {
     assembleProperties.insert(lower::Assemble);
   }
   content->assembleWhileCompute = assembleWhileCompute;
+  if (fuseIterators) {
+    computeProperties.insert(lower::FuseIterators);
+  }
 
   content->assembleFunc = lower::lower(*this, "assemble", assembleProperties);
   content->computeFunc  = lower::lower(*this, "compute", computeProperties);

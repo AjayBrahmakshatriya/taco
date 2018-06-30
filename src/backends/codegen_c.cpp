@@ -214,16 +214,13 @@ string unpackTensorProperty(string varname, const GetProperty* op,
   // for a Dense level, nnz is an int
   // for a Fixed level, ptr is an int
   // all others are int*
-  if ((tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Dense &&
-       op->property == TensorProperty::Dimensions) ||
-      (tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Fixed &&
-       op->property == TensorProperty::Dimensions) ||
-      (tensor->format.getDimensionTypes()[op->dimension] == DimensionType::Banded &&
-       op->property == TensorProperty::Dimensions)) {
+  if (op->property == TensorProperty::Dimensions) {
     tp = "int";
-    ret << tp << " " << varname << " = *(int*)("
-        << tensor->name << "->indices[" << op->dimension << "][0]);\n";
+    ret << tp << " " << varname << " = (int)("
+        << tensor->name << "->dims[" << tensor->name << "->dim_order["
+        << op->dimension << "]]);\n";
   } else {
+    taco_iassert(op->property == TensorProperty::Indices);
     tp = "int*";
     auto nm = op->index;
     ret << tp << " restrict " << varname << " = ";
@@ -263,12 +260,10 @@ string packTensorProperty(string varname, Expr tnsr, TensorProperty property,
   // for a Dense level, nnz is an int
   // for a Fixed level, ptr is an int
   // all others are int*
-  if ((tensor->format.getDimensionTypes()[dim] == DimensionType::Dense &&
-       property == TensorProperty::Dimensions) ||
-      (tensor->format.getDimensionTypes()[dim] == DimensionType::Fixed &&
-       property == TensorProperty::Dimensions)) {
+  if (property == TensorProperty::Dimensions) {
     return "";
   } else {
+    taco_iassert(property == TensorProperty::Indices);
     tp = "int*";
     auto nm = index;
     ret << tensor->name << "->indices" <<

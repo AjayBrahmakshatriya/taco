@@ -68,11 +68,16 @@ Expr BandedIterator::getIteratorVar() const {
 }
 
 Expr BandedIterator::begin() const {
-  return Neg::make(Min::make(0, Load::make(getOffsetArr(), getParent().getIdxVar())));
+  return Max::make(0, Neg::make(Load::make(getOffsetArr(), getParent().getIdxVar())));
 }
 
 Expr BandedIterator::end() const {
-  return Sub::make(getRangeSize(), Max::make(0, Load::make(getOffsetArr(), getParent().getIdxVar())));
+  taco_iassert(getPack().getFirstIterator() == this);
+  taco_iassert(getPack().getSize() > 1);
+
+  return Min::make(getRangeSize(), 
+      Sub::make(GetProperty::make(tensor, TensorProperty::Dimensions, level+1),
+      Load::make(getOffsetArr(), getParent().getIdxVar())));
 }
 
 Expr BandedIterator::getIdx(Expr pos) const {

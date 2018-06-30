@@ -626,10 +626,12 @@ static vector<Stmt> lower(const Target&    target,
       if (emitCompute &&
           (indexVarCase == LAST_FREE || indexVarCase == BELOW_LAST_FREE)) {
         const Iterator iter = lq.getRangeIterators().front();
+        const bool doReduce = (iter.hasDuplicates() && isFused(iter, ctx)) || 
+            (ctx.schedule.hasReductionVariableAncestor(indexVar)) ;
         // TODO: Fix this (e.g. CSB SpMV_T)
-        const bool doReduce = (iter.hasDuplicates() && 
-            (isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) || 
-            (ctx.schedule.hasReductionVariableAncestor(indexVar) && !(isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) ;
+        //const bool doReduce = (iter.hasDuplicates() && 
+        //    (isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) || 
+        //    (ctx.schedule.hasReductionVariableAncestor(indexVar) && !(isFused(iter, ctx) || isFusedIteratorStart(iter, ctx))) ;
         emitComputeExpr(target, indexVar, lqExpr, ctx, doReduce, caseBody);
       }
 
@@ -666,7 +668,7 @@ static vector<Stmt> lower(const Target&    target,
                               Sub::make(nextIteratorPos, resultStartVar) : 
                               resultNextIterator.getRangeSize();
               taco_iassert(inserted.defined() && 
-                           (!isa<Literal>(inserted) || inserted.as<Literal>() > 0));
+                           (!isa<Literal>(inserted) || inserted.as<Literal>()->value > 0));
 
               Stmt initResultInserted = VarAssign::make(resultInsertedVar, 
                                                         inserted, true);
@@ -773,7 +775,9 @@ Stmt lower(TensorBase tensor, string funcName, set<Property> properties) {
   ctx.schedule = IterationSchedule::make(tensor);
   ctx.iterators = Iterators(ctx.schedule, tensorVars);
 
-  mergeIterators(ctx, indexExpr);
+  if (util::contains(ctx.properties, FuseIterators)) {
+    mergeIterators(ctx, indexExpr);
+  }
 
   vector<Stmt> init, body;
 

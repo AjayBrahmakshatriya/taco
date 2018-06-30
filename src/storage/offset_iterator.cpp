@@ -90,10 +90,23 @@ ir::Stmt OffsetIterator::initStorage(ir::Expr size) const {
 }
 
 ir::Expr OffsetIterator::getOffsetArr() const {
-  return getParent().getIndex(0);
+  return getIndex(0);
 }
 
 ir::Expr OffsetIterator::getIndex(int index) const {
+  if (getPack().getFirstIterator() != this) {
+    return getPack().getFirstIterator().getIndex(index);
+  }
+
+  switch (index) {
+    case 0: {
+      auto name = tensor.as<Var>()->name + std::to_string(level) + "_offset";
+      return GetProperty::make(tensor, TensorProperty::Indices, level, 0, name);
+    }
+    default:
+      taco_iassert(false);
+      break;
+  }
   return Expr();
 }
 
