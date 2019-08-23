@@ -59,7 +59,7 @@ private:
       return;
     }
 
-    if (!util::contains(access->indexVars,i)) {
+    if (!util::contains(Access(access).getIndexVars(),i)) {
       // The access expression does not index i so we construct a lattice from
       // the mode iterator.  This is sufficient to support broadcast semantics!
       lattice = modeIterationLattice();
@@ -201,16 +201,16 @@ private:
     lattice = build(node->rhs);
     latticesOfTemporaries.insert({node->lhs.getTensorVar(), lattice});
 
-    if (util::contains(node->lhs.getIndexVars(), i)) {
-      // Add result to each point in l
-      Iterator result = getIterator(node->lhs);
-      vector<MergePoint> points;
-      for (auto& point : lattice.points()) {
-        points.push_back(MergePoint(point.iterators(), point.locators(),
-                                    {result}));
-      }
-      lattice = MergeLattice(points);
-    }
+    //if (util::contains(node->lhs.getIndexVars(), i)) {
+    //  // Add result to each point in l
+    //  Iterator result = getIterator(node->lhs);
+    //  vector<MergePoint> points;
+    //  for (auto& point : lattice.points()) {
+    //    points.push_back(MergePoint(point.iterators(), point.locators(),
+    //                                {result}));
+    //  }
+    //  lattice = MergeLattice(points);
+    //}
   }
 
   void visit(const YieldNode* node) {

@@ -87,6 +87,9 @@ Token Lexer::getToken() {
     case '=':
       token = Token::eq;
       break;
+    case '#':
+      token = Token::hash;
+      break;
     case EOF:
       token = Token::eot;
       break;
@@ -157,6 +160,9 @@ std::string Lexer::tokenString(const Token& token) {
       break;
     case Token::eq:
       str = "=";
+      break;
+    case Token::hash:
+      str = '#';
       break;
     case Token::error:
       str = "error";

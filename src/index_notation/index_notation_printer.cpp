@@ -5,6 +5,46 @@ using namespace std;
 
 namespace taco {
 
+IndexVarExprPrinter::IndexVarExprPrinter(std::ostream& os) : os(os) {
+}
+
+void IndexVarExprPrinter::print(const IndexVarExpr& expr) {
+  parentPrecedence = Precedence::TOP;
+  expr.accept(this);
+}
+
+void IndexVarExprPrinter::visit(const IndexVarAccessNode* op) {
+  os << op->ivar;
+}
+
+void IndexVarExprPrinter::visit(const IndexVarLiteralNode* op) {
+  os << op->val;
+}
+
+template <typename Node>
+void IndexVarExprPrinter::visitBinary(Node op, Precedence precedence) {
+  bool parenthesize =  precedence > parentPrecedence;
+  if (parenthesize) {
+    os << "(";
+  }
+  parentPrecedence = precedence;
+  op->a.accept(this);
+  os << " " << op->getOperatorString() << " ";
+  parentPrecedence = precedence;
+  op->b.accept(this);
+  if (parenthesize) {
+    os << ")";
+  }
+}
+
+void IndexVarExprPrinter::visit(const IndexVarSubNode* op) {
+  visitBinary(op, Precedence::SUB);
+}
+
+void IndexVarExprPrinter::visit(const IndexVarDivNode* op) {
+  visitBinary(op, Precedence::DIV);
+}
+
 IndexNotationPrinter::IndexNotationPrinter(std::ostream& os) : os(os) {
 }
 
@@ -20,8 +60,8 @@ void IndexNotationPrinter::print(const IndexStmt& expr) {
 
 void IndexNotationPrinter::visit(const AccessNode* op) {
   os << op->tensorVar.getName();
-  if (op->indexVars.size() > 0) {
-    os << "(" << util::join(op->indexVars,",") << ")";
+  if (op->indices.size() > 0) {
+    os << "(" << util::join(op->indices,",") << ")";
   }
 }
 

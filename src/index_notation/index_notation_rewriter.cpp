@@ -9,7 +9,21 @@ using namespace std;
 
 namespace taco {
 
-// class ExprRewriterStrict
+// class IndexVarExprRewriterStrict
+IndexVarExpr IndexVarExprRewriterStrict::rewrite(IndexVarExpr e) {
+  if (e.defined()) {
+    e.accept(this);
+    e = expr;
+  }
+  else {
+    e = IndexVarExpr();
+  }
+  expr = IndexVarExpr();
+  return e;
+}
+
+
+// class IndexExprRewriterStrict
 IndexExpr IndexExprRewriterStrict::rewrite(IndexExpr e) {
   if (e.defined()) {
     e.accept(this);
@@ -37,7 +51,37 @@ IndexStmt IndexStmtRewriterStrict::rewrite(IndexStmt s) {
 }
 
 
-// class ExprRewriter
+// class IndexVarExprRewriter
+void IndexVarExprRewriter::visit(const IndexVarAccessNode* op) {
+  expr = op;
+}
+
+void IndexVarExprRewriter::visit(const IndexVarLiteralNode* op) {
+  expr = op;
+}
+
+template <class T>
+IndexVarExpr visitBinaryOp(const T *op, IndexVarExprRewriter *rw) {
+  IndexVarExpr a = rw->rewrite(op->a);
+  IndexVarExpr b = rw->rewrite(op->b);
+  if (a == op->a && b == op->b) {
+    return op;
+  }
+  else {
+    return new T(a, b);
+  }
+}
+
+void IndexVarExprRewriter::visit(const IndexVarSubNode* op) {
+  expr = visitBinaryOp(op, this);
+}
+
+void IndexVarExprRewriter::visit(const IndexVarDivNode* op) {
+  expr = visitBinaryOp(op, this);
+}
+
+
+// class IndexExprRewriter
 void IndexNotationRewriter::visit(const AccessNode* op) {
   expr = op;
 }
@@ -293,26 +337,41 @@ struct ReplaceRewriter : public IndexNotationRewriter {
 };
 
 struct ReplaceIndexVars : public IndexNotationRewriter {
-  const std::map<IndexVar,IndexVar>& substitutions;
+  struct ReplaceIndexVarsInner : public IndexVarExprRewriter {
+    const std::map<IndexVar,IndexVar>& substitutions;
+    ReplaceIndexVarsInner(const std::map<IndexVar,IndexVar>& substitutions)
+        : substitutions(substitutions) {}
+  
+    using IndexVarExprRewriter::visit;
+  
+    void visit(const IndexVarAccessNode* op) {
+      if (util::contains(substitutions, op->ivar)) {
+        expr = substitutions.at(op->ivar);
+      }
+      else {
+        expr = op;
+      }
+    }
+  };
+
+  ReplaceIndexVarsInner indexVarExprRewriter;
   ReplaceIndexVars(const std::map<IndexVar,IndexVar>& substitutions)
-      : substitutions(substitutions) {}
+      : indexVarExprRewriter(substitutions) {}
 
   using IndexNotationRewriter::visit;
 
   void visit(const AccessNode* op) {
-    vector<IndexVar> indexVars;
+    vector<IndexVarExpr> indices;
     bool modified = false;
-    for (auto& var : op->indexVars) {
-      if (util::contains(substitutions, var)) {
-        indexVars.push_back(substitutions.at(var));
+    for (auto& index : op->indices) {
+      const auto rewrittenIndex = indexVarExprRewriter.rewrite(index);
+      indices.push_back(rewrittenIndex);
+      if (rewrittenIndex != index) {
         modified = true;
-      }
-      else {
-        indexVars.push_back(var);
       }
     }
     if (modified) {
-      expr = Access(op->tensorVar, indexVars);
+      expr = Access(op->tensorVar, indices);
     }
     else {
       expr = op;
@@ -332,7 +391,7 @@ struct ReplaceTensorVars : public IndexNotationRewriter {
   void visit(const AccessNode* op) {
     TensorVar var = op->tensorVar;
     expr = (util::contains(substitutions, var))
-           ? Access(substitutions.at(var), op->indexVars)
+           ? Access(substitutions.at(var), op->indices)
            : op;
   }
 

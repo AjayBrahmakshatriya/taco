@@ -44,8 +44,9 @@ bool dimensionsTypecheck(const std::vector<IndexVar>& resultVars,
 
   vector<const AccessNode*> readNodes = getAccessNodes(expr);
   for (auto& readNode : readNodes) {
-    for (size_t mode = 0; mode < readNode->indexVars.size(); mode++) {
-      IndexVar var = readNode->indexVars[mode];
+    const auto indexVars = Access(readNode).getIndexVars();
+    for (size_t mode = 0; mode < indexVars.size(); mode++) {
+      IndexVar var = indexVars[mode];
       Dimension dimension =
           readNode->tensorVar.getType().getShape().getDimension(mode);
       if (util::contains(indexVarDims,var) &&
@@ -87,8 +88,9 @@ std::string dimensionTypecheckErrors(const std::vector<IndexVar>& resultVars,
 
   vector<const AccessNode*> readNodes = getAccessNodes(expr);
   for (auto& readNode : readNodes) {
-    for (size_t mode = 0; mode < readNode->indexVars.size(); mode++) {
-      IndexVar var = readNode->indexVars[mode];
+    const auto indexVars = Access(readNode).getIndexVars();
+    for (size_t mode = 0; mode < indexVars.size(); mode++) {
+      IndexVar var = indexVars[mode];
       Dimension dimension =
           readNode->tensorVar.getType().getShape().getDimension(mode);
       if (util::contains(indexVarDims,var) &&
@@ -157,7 +159,7 @@ bool containsTranspose(const Format& resultFormat,
   addEdges(resultVars, resultFormat.getModeOrdering(), &successors);
   match(expr,
     std::function<void(const AccessNode*)>([&successors](const AccessNode* op) {
-      addEdges(op->indexVars, op->tensorVar.getFormat().getModeOrdering(),
+      addEdges(Access(op).getIndexVars(), op->tensorVar.getFormat().getModeOrdering(),
                &successors);
     })
   );

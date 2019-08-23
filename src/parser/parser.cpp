@@ -88,8 +88,9 @@ TensorBase Parser::parseAssign() {
     map<IndexVar, int>* indexVarDimensions;
 
     void visit(const AccessNode* op) {
-      for (size_t i = 0; i < op->indexVars.size(); i++) {
-        IndexVar indexVar = op->indexVars[i];
+      const auto indexVars = Access(op).getIndexVars();
+      for (size_t i = 0; i < indexVars.size(); i++) {
+        IndexVar indexVar = indexVars[i];
         if (!util::contains(modesWithDefaults, {op->tensorVar,i})) {
           auto dimension = op->tensorVar.getType().getShape().getDimension(i);
           if (util::contains(*indexVarDimensions, indexVar)) {
@@ -123,13 +124,14 @@ TensorBase Parser::parseAssign() {
         dimensions.push_back((int)dimension.getSize());
       }
 
-      taco_uassert(op->indexVars.size() == dimensions.size()) <<
+      taco_uassert(op->indices.size() == dimensions.size()) <<
           "The order of " << op->tensorVar.getName() << " is inconsistent " <<
           "between tensor accesses or options. Is it order " <<
-          dimensions.size() << " or " << op->indexVars.size() << "?";
+          dimensions.size() << " or " << op->indices.size() << "?";
 
+      const auto indexVars = Access(op).getIndexVars();
       for (size_t i=0; i < dimensions.size(); i++) {
-        IndexVar indexVar = op->indexVars[i];
+        IndexVar indexVar = indexVars[i];
         if (util::contains(*indexVarDimensions, indexVar)) {
           int dimension = indexVarDimensions->at(indexVar);
           if (dimension != dimensions[i]) {
@@ -149,7 +151,7 @@ TensorBase Parser::parseAssign() {
                               op->tensorVar.getFormat());
           tensors.insert({tensor.getName(), tensor});
         }
-        expr = tensor(op->indexVars);
+        expr = tensor(indexVars);
       }
       else {
         expr = op;
@@ -160,7 +162,7 @@ TensorBase Parser::parseAssign() {
   rewriter.indexVarDimensions = visitor.indexVarDimensions;
   rhs = rewriter.rewrite(rhs);
 
-  IndexExpr rewrittenLhs = rewriter.rewrite(lhs);
+  //IndexExpr rewrittenLhs = rewriter.rewrite(lhs);
 
   for (auto& tensor : rewriter.tensors) {
     content->tensors.at(tensor.first) = tensor.second;
@@ -168,7 +170,7 @@ TensorBase Parser::parseAssign() {
   content->resultTensor = content->tensors.at(lhs.getTensorVar().getName());
 
   Assignment assignment = Assignment(content->resultTensor.getTensorVar(),
-                                     lhs.getIndexVars(), rhs,
+                                     lhs.getIndices(), rhs,
                                      accumulate ? new AddNode : IndexExpr());
   content->resultTensor.setAssignment(assignment);
   return content->resultTensor;
@@ -276,7 +278,7 @@ Access Parser::parseAccess() {
   string tensorName = content->lexer.getIdentifier();
   consume(Token::identifier);
 
-  vector<IndexVar> varlist;
+  vector<IndexVarExpr> varlist;
   if (content->currentToken == Token::underscore) {
     consume(Token::underscore);
     if (content->currentToken == Token::lcurly) {
@@ -316,12 +318,18 @@ Access Parser::parseAccess() {
       if (util::contains(content->tensorDimensions, tensorName)) {
         tensorDimensions[i] = content->tensorDimensions.at(tensorName)[i];
       }
-      else if (util::contains(content->indexVarDimensions, varlist[i])) {
-        tensorDimensions[i] = content->indexVarDimensions.at(varlist[i]);
-      }
       else {
-        tensorDimensions[i] = content->defaultDimension;
-        modesWithDefaults[i] = true;
+        IndexVar ivar;
+        if (isa<IndexVarAccess>(varlist[i])) {
+          ivar = to<IndexVarAccess>(varlist[i]).getIndexVar();
+        }
+        if (util::contains(content->indexVarDimensions, ivar)) {
+          tensorDimensions[i] = content->indexVarDimensions.at(ivar);
+        }
+        else {
+          tensorDimensions[i] = content->defaultDimension;
+          modesWithDefaults[i] = true;
+        }
       }
     }
     Datatype dataType = Float();
@@ -341,7 +349,93 @@ Access Parser::parseAccess() {
   return tensor(varlist);
 }
 
-vector<IndexVar> Parser::parseVarList() {
+vector<IndexVarExpr> Parser::parseVarList() {
+  vector<IndexVarExpr> varlist;
+  varlist.push_back(parseVarExpr());
+  while (content->currentToken == Token::comma) {
+    consume(Token::comma);
+    varlist.push_back(parseVarExpr());
+  }
+  return varlist;
+}
+
+IndexVarExpr Parser::parseVarExpr() {
+  IndexVarExpr expr = parseVarTerm();
+  while (content->currentToken == Token::add ||
+         content->currentToken == Token::sub) {
+    switch (content->currentToken) {
+      case Token::add:
+        taco_not_supported_yet;
+        break;
+      case Token::sub:
+        consume(Token::sub);
+        expr = expr - parseVarTerm();
+        break;
+      default:
+        taco_unreachable;
+    }
+  }
+  return expr;
+}
+
+IndexVarExpr Parser::parseVarTerm() {
+  IndexVarExpr term = parseVarFactor();
+  while (content->currentToken == Token::mul || 
+         content->currentToken == Token::div) {
+    switch (content->currentToken) {
+      case Token::mul: {
+        taco_not_supported_yet;
+        break;
+      }
+      case Token::div: {
+        consume(Token::div);
+        term = term / parseVarFactor();
+        break;
+        }
+      default:
+        taco_unreachable;
+    }
+  }
+  return term;
+}
+
+IndexVarExpr Parser::parseVarFactor() {
+  switch (content->currentToken) {
+    case Token::lparen: {
+      consume(Token::lparen);
+      IndexVarExpr factor = parseVarExpr();
+      consume(Token::rparen);
+      return factor;
+    }
+    default:
+      break;
+  }
+  return parseVarFinal();
+}
+
+IndexVarExpr Parser::parseVarFinal() {
+  std::istringstream value (content->lexer.getIdentifier());
+  switch (content->currentToken) {
+    case Token::int_scalar:
+    {
+      consume(Token::int_scalar);
+      int64_t int_value;
+      value >> int_value;
+      return IndexVarExpr(int_value);
+    }
+    case Token::uint_scalar:
+    {
+      consume(Token::uint_scalar);
+      uint64_t uint_value;
+      value >> uint_value;
+      return IndexVarExpr(uint_value);
+    }
+    default:
+      return parseVar();
+  }
+}
+
+vector<IndexVar> Parser::parseVars() {
   vector<IndexVar> varlist;
   varlist.push_back(parseVar());
   while (content->currentToken == Token::comma) {

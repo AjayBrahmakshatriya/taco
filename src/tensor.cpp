@@ -163,8 +163,7 @@ static IndexStmt makeConcrete(Assignment assignment) {
         Format format = convertToNewDense(var.getFormat());
         vars.insert({var, TensorVar(var.getName(), var.getType(), format)});
       }
-      expr = Access(vars.at(var),
-                    op->indexVars);
+      expr = Access(vars.at(var), op->indices);
     }
 
     void visit(const AssignmentNode* op) {
@@ -427,6 +426,8 @@ void TensorBase::zero() {
 struct AccessTensorNode : public AccessNode {
   AccessTensorNode(TensorBase tensor, const std::vector<IndexVar>& indices)
       :  AccessNode(tensor.getTensorVar(), indices), tensor(tensor) {}
+  AccessTensorNode(TensorBase tensor, const std::vector<IndexVarExpr>& indices)
+      :  AccessNode(tensor.getTensorVar(), indices), tensor(tensor) {}
   TensorBase tensor;
   virtual void setAssignment(const Assignment& assignment) {
     tensor.setAssignment(assignment);
@@ -441,10 +442,18 @@ const Access TensorBase::operator()(const std::vector<IndexVar>& indices) const 
   return Access(new AccessTensorNode(*this, indices));
 }
 
-Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
+//Access TensorBase::operator()(const std::vector<IndexVar>& indices) {
+//  taco_uassert(indices.size() == (size_t)getOrder())
+//      << "A tensor of order " << getOrder() << " must be indexed with "
+//      << getOrder() << " variables, but is indexed with:  "
+//      << util::join(indices);
+//  return Access(new AccessTensorNode(*this, indices));
+//}
+
+Access TensorBase::operator()(const std::vector<IndexVarExpr>& indices) {
   taco_uassert(indices.size() == (size_t)getOrder())
       << "A tensor of order " << getOrder() << " must be indexed with "
-      << getOrder() << " variables, but is indexed with:  "
+      << getOrder() << " indices, but is indexed with:  "
       << util::join(indices);
   return Access(new AccessTensorNode(*this, indices));
 }
@@ -576,7 +585,7 @@ void TensorBase::operator=(const IndexExpr& expr) {
   taco_uassert(getOrder() == 0)
       << "Must use index variable on the left-hand-side when assigning an "
       << "expression to a non-scalar tensor.";
-  setAssignment(Assignment(getTensorVar(), {}, expr));
+  setAssignment(Assignment(getTensorVar(), std::vector<IndexVar>(), expr));
 }
 
 void TensorBase::setAssignment(Assignment assignment) {
@@ -694,7 +703,7 @@ TensorBase::getHelperFunctions(const Format& format, Datatype ctype,
         }
         expr = Access(TensorVar(var.getName(), var.getType(),
                                 Format(packs, format.getModeOrdering())),
-                      op->indexVars);
+                      op->indices);
       };
     };
     packStmt = Rewriter().rewrite(packStmt);

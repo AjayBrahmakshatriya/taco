@@ -6,6 +6,39 @@
 
 namespace taco {
 
+class IndexVarExprPrinter : public IndexVarExprVisitorStrict {
+public:
+  IndexVarExprPrinter(std::ostream& os);
+
+  void print(const IndexVarExpr& expr);
+
+  using IndexVarExprVisitorStrict::visit;
+
+  void visit(const IndexVarAccessNode*);
+  void visit(const IndexVarLiteralNode*);
+  void visit(const IndexVarSubNode*);
+  void visit(const IndexVarDivNode*);
+
+private:
+  std::ostream& os;
+
+  enum class Precedence {
+    ACCESS = 2,
+    FUNC = 2,
+    CAST = 2,
+    REDUCTION = 2,
+    NEG = 3,
+    MUL = 5,
+    DIV = 5,
+    ADD = 6,
+    SUB = 6,
+    TOP = 20
+  };
+  Precedence parentPrecedence;
+
+  template <typename Node> void visitBinary(Node op, Precedence p);
+};
+
 class IndexNotationPrinter : public IndexNotationVisitorStrict {
 public:
   IndexNotationPrinter(std::ostream& os);

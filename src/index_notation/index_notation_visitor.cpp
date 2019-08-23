@@ -5,6 +5,38 @@ using namespace std;
 
 namespace taco {
 
+// class IndexVarExprVisitorStrict
+IndexVarExprVisitorStrict::~IndexVarExprVisitorStrict() {
+}
+
+void IndexVarExprVisitorStrict::visit(const IndexVarExpr& expr) {
+  expr.accept(this);
+}
+
+
+// class IndexVarExprVisitor
+IndexVarExprVisitor::~IndexVarExprVisitor() {
+}
+
+void IndexVarExprVisitor::visit(const IndexVarAccessNode* op) {
+}
+
+void IndexVarExprVisitor::visit(const IndexVarLiteralNode* op) {
+}
+
+void IndexVarExprVisitor::visit(const IndexVarSubNode* op) {
+  visit(static_cast<const BinaryIndexVarExprNode*>(op));
+}
+
+void IndexVarExprVisitor::visit(const IndexVarDivNode* op) {
+  visit(static_cast<const BinaryIndexVarExprNode*>(op));
+}
+
+void IndexVarExprVisitor::visit(const BinaryIndexVarExprNode* op) {
+  op->a.accept(this);
+  op->b.accept(this);
+}
+
 // class IndexExprVisitorStrict
 IndexExprVisitorStrict::~IndexExprVisitorStrict() {
 }

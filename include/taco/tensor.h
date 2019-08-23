@@ -378,7 +378,10 @@ public:
   const Access operator()(const std::vector<IndexVar>& indices) const;
 
   /// Create an index expression that accesses (reads or writes) this tensor.
-  Access operator()(const std::vector<IndexVar>& indices);
+  //Access operator()(const std::vector<IndexVar>& indices);
+
+  /// Create an index expression that accesses (reads or writes) this tensor.
+  Access operator()(const std::vector<IndexVarExpr>& indices);
 
   /// Create an index expression that accesses (reads) this tensor.
   template <typename... IndexVars>

@@ -33,6 +33,11 @@ class IndexExpr;
 class Assignment;
 class Access;
 
+struct IndexVarAccessNode;
+struct IndexVarLiteralNode;
+struct IndexVarSubNode;
+struct IndexVarDivNode;
+
 struct AccessNode;
 struct LiteralNode;
 struct NegNode;
@@ -54,6 +59,105 @@ struct MultiNode;
 
 class IndexExprVisitorStrict;
 class IndexStmtVisitorStrict;
+
+class IndexVarExpr : public util::IntrusivePtr<const IndexVarExprNode> {
+public:
+  IndexVarExpr() : util::IntrusivePtr<const IndexVarExprNode>(nullptr) {}
+  IndexVarExpr(const IndexVarExprNode* n) : util::IntrusivePtr<const IndexVarExprNode>(n) {}
+
+  IndexVarExpr(IndexVar);
+
+  IndexVarExpr(size_t);
+
+  /// Visit the index expression's sub-expressions.
+  void accept(IndexVarExprVisitorStrict *) const;
+
+  /// Print the index expression.
+  friend std::ostream& operator<<(std::ostream&, const IndexVarExpr&);
+};
+
+/// Compare two index expressions by value.
+bool equals(IndexVarExpr, IndexVarExpr);
+
+/// Subtract an index var expression from another.
+/// ```
+/// A(i-j,i,j) 
+/// ```
+IndexVarExpr operator-(const IndexVarExpr&, const IndexVarExpr&);
+
+/// Divide an index var expression by another.
+/// ```
+/// A(i/2,i)
+/// ```
+IndexVarExpr operator/(const IndexVarExpr&, const IndexVarExpr&);
+
+/// Return true if the index var expr is of the given subtype.
+template <typename SubType> bool isa(IndexVarExpr);
+
+/// Casts the index var expr to the given subtype. 
+template <typename SubType> SubType to(IndexVarExpr);
+
+
+/// Access of an individual index var.
+class IndexVarAccess : public IndexVarExpr {
+public:
+  IndexVarAccess() = default;
+  IndexVarAccess(const IndexVarAccessNode*);
+  IndexVarAccess(IndexVar indexVar);
+
+  IndexVar getIndexVar() const;
+
+  typedef IndexVarAccessNode Node;
+};
+
+
+/// A literal index var expression is a scalar literal that is embedded in the code.
+class IndexVarLiteral : public IndexVarExpr {
+public:
+  IndexVarLiteral() = default;
+  IndexVarLiteral(const IndexVarLiteralNode*);
+  IndexVarLiteral(size_t);
+
+  /// Returns the literal value.
+  size_t getVal() const;
+
+  typedef IndexVarLiteralNode Node;
+};
+
+
+/// A sub expression subtracts two index vars.
+/// ```
+/// a(i-j)
+/// ```
+class IndexVarSub : public IndexVarExpr {
+public:
+  IndexVarSub();
+  IndexVarSub(const IndexVarSubNode*);
+  IndexVarSub(IndexVarExpr a, IndexVarExpr b);
+
+  IndexVarExpr getA() const;
+  IndexVarExpr getB() const;
+
+  typedef IndexVarSubNode Node;
+};
+
+
+/// An div expression divides two index vars.
+/// ```
+/// a(i/2)
+/// ```
+class IndexVarDiv : public IndexVarExpr {
+public:
+  IndexVarDiv();
+  IndexVarDiv(const IndexVarDivNode*);
+  IndexVarDiv(IndexVarExpr a, IndexVarExpr b);
+
+  IndexVarExpr getA() const;
+  IndexVarExpr getB() const;
+
+  typedef IndexVarDivNode Node;
+};
+
 
 /// A tensor index expression describes a tensor computation as a scalar
 /// expression where tensors are indexed by index variables (`IndexVar`).  The
@@ -213,12 +317,16 @@ public:
   Access() = default;
   Access(const AccessNode*);
   Access(const TensorVar& tensorVar, const std::vector<IndexVar>& indices={});
+  Access(const TensorVar& tensorVar, const std::vector<IndexVarExpr>& indices);
 
   /// Return the Access expression's TensorVar.
   const TensorVar &getTensorVar() const;
 
+  /// Returns the index variable expressions used to index into the Access's TensorVar.
+  const std::vector<IndexVarExpr>& getIndices() const;
+
   /// Returns the index variables used to index into the Access's TensorVar.
-  const std::vector<IndexVar>& getIndexVars() const;
+  std::vector<IndexVar> getIndexVars() const;
 
   /// Assign the result of an expression to a left-hand-side tensor access.
   /// ```
@@ -515,6 +623,11 @@ public:
   Assignment(TensorVar tensor, std::vector<IndexVar> indices, IndexExpr rhs,
              IndexExpr op = IndexExpr());
 
+  /// Create an assignment. Can specify an optional operator `op` that turns the
+  /// assignment into a compound assignment, e.g. `+=`.
+  Assignment(TensorVar tensor, std::vector<IndexVarExpr> indices, IndexExpr rhs,
+             IndexExpr op = IndexExpr());
+
   /// Return the assignment's left-hand side.
   Access getLhs() const;
 
@@ -527,7 +640,7 @@ public:
 
   /// Return the free index variables in the assignment, which are those used to
   /// access the left-hand side.
-  const std::vector<IndexVar>& getFreeVars() const;
+  std::vector<IndexVar> getFreeVars() const;
 
   /// Return the reduction index variables i nthe assign
   std::vector<IndexVar> getReductionVars() const;

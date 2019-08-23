@@ -52,7 +52,7 @@ vector<IndexExpr> getAvailableExpressions(const IndexExpr& expr,
 
     void visit(const AccessNode* op) {
       bool available = true;
-      for (auto& var : op->indexVars) {
+      for (auto& var : Access(op).getIndexVars()) {
         if (!util::contains(visitedVars, var)) {
           available = false;
           break;
@@ -127,7 +127,7 @@ IndexExpr getSubExprOld(IndexExpr expr, const vector<IndexVar>& vars) {
     void visit(const AccessNode* op) {
       // If any variable is in the set of index variables, then the expression
       // has not been emitted at a previous level, so we keep it.
-      for (auto& indexVar : op->indexVars) {
+      for (auto& indexVar : Access(op).getIndexVars()) {
         if (util::contains(vars, indexVar)) {
           subExpr = op;
           return;
@@ -192,7 +192,7 @@ private:
   void visit(const AccessNode* op) {
     // If any variable is in the set of index variables, then the expression
     // has not been emitted at a previous level, so we keep it.
-    for (auto& indexVar : op->indexVars) {
+    for (auto& indexVar : Access(op).getIndexVars()) {
       if (util::contains(vars, indexVar)) {
         subExpr = op;
         return;

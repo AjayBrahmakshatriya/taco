@@ -243,7 +243,7 @@ MergeLattice MergeLattice::make(const IndexExpr& indexExpr,
 
     void visit(const AccessNode* expr) {
       // Throw away expressions `indexVar` does not contribute to
-      if (!util::contains(expr->indexVars, indexVar)) {
+      if (!util::contains(Access(expr).getIndexVars(), indexVar)) {
         lattice = MergeLattice();
         return;
       }

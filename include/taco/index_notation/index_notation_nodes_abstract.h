@@ -12,10 +12,21 @@ namespace taco {
 
 class TensorVar;
 class IndexVar;
+class IndexVarExprVisitorStrict;
 class IndexExprVisitorStrict;
 class IndexStmtVisitorStrict;
 class OperatorSplit;
 class Precompute;
+
+/// A node in a tensor index var expression tree
+struct IndexVarExprNode : public util::Manageable<IndexVarExprNode>,
+                          private util::Uncopyable {
+public:
+  IndexVarExprNode();
+  virtual ~IndexVarExprNode() = default;
+  virtual void accept(IndexVarExprVisitorStrict*) const = 0;
+};
+
 
 /// A node of a scalar index expression tree.
 struct IndexExprNode : public util::Manageable<IndexExprNode>,

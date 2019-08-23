@@ -246,8 +246,7 @@ static IndexStmt makeConcrete(Assignment assignment) {
         Format format = convertToNewDense(var.getFormat());
         vars.insert({var, TensorVar(var.getName(), var.getType(), format)});
       }
-      expr = Access(vars.at(var),
-                    op->indexVars);
+      expr = Access(vars.at(var), op->indices);
     }
 
     void visit(const AssignmentNode* op) {

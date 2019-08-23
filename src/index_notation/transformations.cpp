@@ -579,15 +579,16 @@ IndexStmt reorderLoopsTopologically(IndexStmt stmt) {
     map<IndexVar, multiset<IndexVar>> softDeps;
 
     void visit(const AssignmentNode* op) {
-      op->lhs.accept(this);
+      //op->lhs.accept(this);
       op->rhs.accept(this);
     }
 
     void visit(const AccessNode* node) {
+      const auto indexVars = Access(node).getIndexVars();
       const auto& modeOrdering = node->tensorVar.getFormat().getModeOrdering();
       for (size_t i = 1; i < (size_t)node->tensorVar.getOrder(); ++i) {
-        const auto srcVar = node->indexVars[modeOrdering[i - 1]];
-        const auto dstVar = node->indexVars[modeOrdering[i]];
+        const auto srcVar = indexVars[modeOrdering[i - 1]];
+        const auto dstVar = indexVars[modeOrdering[i]];
         softDeps[dstVar].insert(srcVar);
       }
     }

@@ -13,10 +13,76 @@
 
 namespace taco {
 
+struct BinaryIndexVarExprNode : public IndexVarExprNode {
+  virtual std::string getOperatorString() const = 0;
+
+  IndexVarExpr a;
+  IndexVarExpr b;
+
+protected:
+  BinaryIndexVarExprNode() = default;
+  BinaryIndexVarExprNode(IndexVarExpr a, IndexVarExpr b) : a(a), b(b) {}
+};
+
+
+struct IndexVarAccessNode : public IndexVarExprNode {
+  IndexVarAccessNode(IndexVar ivar) : ivar(ivar) {}
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  IndexVar ivar;
+};
+
+struct IndexVarLiteralNode : public IndexVarExprNode {
+  IndexVarLiteralNode(size_t val) : val(val) {}
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  size_t val;
+};
+
+
+struct IndexVarSubNode : public BinaryIndexVarExprNode {
+  IndexVarSubNode() : BinaryIndexVarExprNode() {}
+  IndexVarSubNode(IndexVarExpr a, IndexVarExpr b) : BinaryIndexVarExprNode(a, b) {}
+
+  std::string getOperatorString() const {
+    return "-";
+  }
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+};
+
+
+struct IndexVarDivNode : public BinaryIndexVarExprNode {
+  IndexVarDivNode() : BinaryIndexVarExprNode() {}
+  IndexVarDivNode(IndexVarExpr a, IndexVarExpr b) : BinaryIndexVarExprNode(a, b) {}
+
+  std::string getOperatorString() const {
+    return "/";
+  }
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+};
+
 
 struct AccessNode : public IndexExprNode {
   AccessNode(TensorVar tensorVar, const std::vector<IndexVar>& indices)
-      : IndexExprNode(tensorVar.getType().getDataType()), tensorVar(tensorVar), indexVars(indices) {}
+      : IndexExprNode(tensorVar.getType().getDataType()), tensorVar(tensorVar) {
+    for (const auto& ivar : indices) {
+      this->indices.push_back(ivar);
+    }
+  }
+  AccessNode(TensorVar tensorVar, const std::vector<IndexVarExpr>& indices)
+      : IndexExprNode(tensorVar.getType().getDataType()), tensorVar(tensorVar), indices(indices) {}
 
   void accept(IndexExprVisitorStrict* v) const {
     v->visit(this);
@@ -25,7 +91,7 @@ struct AccessNode : public IndexExprNode {
   virtual void setAssignment(const Assignment& assignment) {}
 
   TensorVar tensorVar;
-  std::vector<IndexVar> indexVars;
+  std::vector<IndexVarExpr> indices;
 };
 
 struct LiteralNode : public IndexExprNode {
@@ -260,6 +326,20 @@ struct SequenceNode : public IndexStmtNode {
   IndexStmt mutation;
 };
 
+
+/// Returns true if index var expression e is of type E.
+template <typename E>
+inline bool isa(const IndexVarExprNode* e) {
+  return e != nullptr && dynamic_cast<const E*>(e) != nullptr;
+}
+
+/// Casts the index var expression e to type E.
+template <typename E>
+inline const E* to(const IndexVarExprNode* e) {
+  taco_iassert(isa<E>(e)) <<
+      "Cannot convert " << typeid(e).name() << " to " << typeid(E).name();
+  return static_cast<const E*>(e);
+}
 
 /// Returns true if expression e is of type E.
 template <typename E>

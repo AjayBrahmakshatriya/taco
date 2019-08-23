@@ -10,6 +10,9 @@ using namespace std;
 
 namespace taco {
 
+IndexVarExprNode::IndexVarExprNode() {
+}
+
 // class ExprNode
 IndexExprNode::IndexExprNode() : workspace(nullptr) {
 }

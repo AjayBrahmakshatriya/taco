@@ -29,8 +29,203 @@ using namespace std;
 
 namespace taco {
 
+void IndexVarExpr::accept(IndexVarExprVisitorStrict *v) const {
+  ptr->accept(v);
+}
+
+IndexVarExpr::IndexVarExpr(IndexVar var) : IndexVarExpr(new IndexVarAccessNode(var)) {
+}
+
+IndexVarExpr::IndexVarExpr(size_t val) : IndexVarExpr(new IndexVarLiteralNode(val)) {
+}
+
+std::ostream& operator<<(std::ostream& os, const IndexVarExpr& expr) {
+  if (!expr.defined()) return os << "IndexExpr()";
+  IndexVarExprPrinter printer(os);
+  printer.print(expr);
+  return os;
+}
+
+struct IndexVarEquals : public IndexVarExprVisitorStrict {
+  bool eq = false;
+  IndexVarExpr bExpr;
+
+  bool check(IndexVarExpr a, IndexVarExpr b) {
+    this->bExpr = b;
+    a.accept(this);
+    return eq;
+  }
+
+  using IndexVarExprVisitorStrict::visit;
+
+  void visit(const IndexVarAccessNode* anode) {
+    if (!isa<IndexVarAccessNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<IndexVarAccessNode>(bExpr.ptr);
+    if (anode->ivar != bnode->ivar) {
+      eq = false;
+      return;
+    }
+    eq = true;
+  }
+
+  void visit(const IndexVarLiteralNode* anode) {
+    if (!isa<IndexVarLiteralNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<IndexVarLiteralNode>(bExpr.ptr);
+    if (anode->val != bnode->val) {
+      eq = false;
+      return;
+    }
+    eq = true;
+  }
+
+  template <class T>
+  bool binaryEquals(const T* anode, IndexVarExpr b) {
+    if (!isa<T>(b.ptr)) {
+      return false;
+    }
+    auto bnode = to<T>(b.ptr);
+    if (!equals(anode->a, bnode->a) || !equals(anode->b, bnode->b)) {
+      return false;
+    }
+    return true;
+  }
+
+  void visit(const IndexVarSubNode* anode) {
+    eq = binaryEquals(anode, bExpr);
+  }
+
+  void visit(const IndexVarDivNode* anode) {
+    eq = binaryEquals(anode, bExpr);
+  }
+};
+
+bool equals(IndexVarExpr a, IndexVarExpr b) {
+  if (!a.defined() && !b.defined()) {
+    return true;
+  }
+  if ((a.defined() && !b.defined()) || (!a.defined() && b.defined())) {
+    return false;
+  }
+  return IndexVarEquals().check(a,b);
+}
+
+IndexVarExpr operator-(const IndexVarExpr& lhs, const IndexVarExpr& rhs) {
+  return new IndexVarSubNode(lhs, rhs);
+}
+
+IndexVarExpr operator/(const IndexVarExpr& lhs, const IndexVarExpr& rhs) {
+  return new IndexVarDivNode(lhs, rhs);
+}
+
+
+// class IndexVarAccess
+IndexVarAccess::IndexVarAccess(const IndexVarAccessNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarAccess::IndexVarAccess(IndexVar var)
+    : IndexVarAccess(new IndexVarAccessNode(var)) {
+}
+
+IndexVar IndexVarAccess::getIndexVar() const {
+  return getNode(*this)->ivar;
+}
+
+template <> bool isa<IndexVarAccess>(IndexVarExpr s) {
+  return isa<IndexVarAccessNode>(s.ptr);
+}
+
+template <> IndexVarAccess to<IndexVarAccess>(IndexVarExpr s) {
+  taco_iassert(isa<IndexVarAccess>(s));
+  return IndexVarAccess(to<IndexVarAccessNode>(s.ptr));
+}
+
+
+// class IndexVarLiteral
+IndexVarLiteral::IndexVarLiteral(const IndexVarLiteralNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarLiteral::IndexVarLiteral(size_t val)
+    : IndexVarLiteral(new IndexVarLiteralNode(val)) {
+}
+
+size_t IndexVarLiteral::getVal() const {
+  return getNode(*this)->val;
+}
+
+template <> bool isa<IndexVarLiteral>(IndexVarExpr s) {
+  return isa<IndexVarLiteralNode>(s.ptr);
+}
+
+template <> IndexVarLiteral to<IndexVarLiteral>(IndexVarExpr s) {
+  taco_iassert(isa<IndexVarLiteral>(s));
+  return IndexVarLiteral(to<IndexVarLiteralNode>(s.ptr));
+}
+
+
+// class IndexVarSub
+IndexVarSub::IndexVarSub() : IndexVarSub(new IndexVarSubNode) {
+}
+
+IndexVarSub::IndexVarSub(const IndexVarSubNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarSub::IndexVarSub(IndexVarExpr a, IndexVarExpr b) : IndexVarSub(new IndexVarSubNode(a, b)) {
+}
+
+IndexVarExpr IndexVarSub::getA() const {
+  return getNode(*this)->a;
+}
+
+IndexVarExpr IndexVarSub::getB() const {
+  return getNode(*this)->b;
+}
+
+template <> bool isa<IndexVarSub>(IndexVarExpr e) {
+  return isa<IndexVarSubNode>(e.ptr);
+}
+
+template <> IndexVarSub to<IndexVarSub>(IndexVarExpr e) {
+  taco_iassert(isa<IndexVarSub>(e));
+  return IndexVarSub(to<IndexVarSubNode>(e.ptr));
+}
+
+
+// class IndexVarDiv
+IndexVarDiv::IndexVarDiv() : IndexVarDiv(new IndexVarDivNode) {
+}
+
+IndexVarDiv::IndexVarDiv(const IndexVarDivNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarDiv::IndexVarDiv(IndexVarExpr a, IndexVarExpr b) : IndexVarDiv(new IndexVarDivNode(a, b)) {
+}
+
+IndexVarExpr IndexVarDiv::getA() const {
+  return getNode(*this)->a;
+}
+
+IndexVarExpr IndexVarDiv::getB() const {
+  return getNode(*this)->b;
+}
+
+template <> bool isa<IndexVarDiv>(IndexVarExpr e) {
+  return isa<IndexVarDivNode>(e.ptr);
+}
+
+template <> IndexVarDiv to<IndexVarDiv>(IndexVarExpr e) {
+  taco_iassert(isa<IndexVarDiv>(e));
+  return IndexVarDiv(to<IndexVarDivNode>(e.ptr));
+}
+
+
 // class IndexExpr
-IndexExpr::IndexExpr(TensorVar var) : IndexExpr(new AccessNode(var,{})) {
+IndexExpr::IndexExpr(TensorVar var) : IndexExpr(new AccessNode(var,std::vector<IndexVarExpr>())) {
 }
 
 IndexExpr::IndexExpr(char val) : IndexExpr(new LiteralNode(val)) {
@@ -130,12 +325,12 @@ struct Equals : public IndexNotationVisitorStrict {
       eq = false;
       return;
     }
-    if (anode->indexVars.size() != anode->indexVars.size()) {
+    if (anode->indices.size() != anode->indices.size()) {
       eq = false;
       return;
     }
-    for (size_t i = 0; i < anode->indexVars.size(); i++) {
-      if (anode->indexVars[i] != bnode->indexVars[i]) {
+    for (size_t i = 0; i < anode->indices.size(); i++) {
+      if (!equals(anode->indices[i], bnode->indices[i])) {
         eq = false;
         return;
       }
@@ -389,12 +584,26 @@ Access::Access(const TensorVar& tensor, const std::vector<IndexVar>& indices)
     : Access(new AccessNode(tensor, indices)) {
 }
 
+Access::Access(const TensorVar& tensor, const std::vector<IndexVarExpr>& indices)
+    : Access(new AccessNode(tensor, indices)) {
+}
+
 const TensorVar& Access::getTensorVar() const {
   return getNode(*this)->tensorVar;
 }
 
-const std::vector<IndexVar>& Access::getIndexVars() const {
-  return getNode(*this)->indexVars;
+const std::vector<IndexVarExpr>& Access::getIndices() const {
+  return getNode(*this)->indices;
+}
+
+std::vector<IndexVar> Access::getIndexVars() const {
+  // TODO: Use visitor to traverse index var exprs
+  std::vector<IndexVar> indexVars;
+  for (const auto& index : getNode(*this)->indices) {
+    const auto ivar = to<IndexVarAccess>(index);
+    indexVars.push_back(ivar.getIndexVar());
+  }
+  return indexVars;
 }
 
 static void check(Assignment assignment) {
@@ -933,16 +1142,16 @@ std::vector<IndexVar> IndexStmt::getIndexVars() const {
   match(*this,
     std::function<void(const AssignmentNode*,Matcher*)>([&](
         const AssignmentNode* op, Matcher* ctx) {
-      for (auto& var : op->lhs.getIndexVars()) {
-        if (!util::contains(seen, var)) {
-          vars.push_back(var);
-          seen.insert(var);
-        }
-      }
+      //for (auto& var : op->lhs.getIndexVars()) {
+      //  if (!util::contains(seen, var)) {
+      //    vars.push_back(var);
+      //    seen.insert(var);
+      //  }
+      //}
       ctx->match(op->rhs);
     }),
     std::function<void(const AccessNode*)>([&](const AccessNode* op) {
-      for (auto& var : op->indexVars) {
+      for (auto& var : Access(op).getIndexVars()) {
         if (!util::contains(seen, var)) {
           vars.push_back(var);
           seen.insert(var);
@@ -958,12 +1167,12 @@ map<IndexVar,Dimension> IndexStmt::getIndexVarDomains() {
   match(*this,
     std::function<void(const AssignmentNode*,Matcher*)>([](
         const AssignmentNode* op, Matcher* ctx) {
-      ctx->match(op->lhs);
+      //ctx->match(op->lhs);
       ctx->match(op->rhs);
     }),
     function<void(const AccessNode*)>([&indexVarDomains](const AccessNode* op) {
-      auto& type = op->tensorVar.getType();
-      auto& vars = op->indexVars;
+      const auto& type = op->tensorVar.getType();
+      const auto vars = Access(op).getIndexVars();
       for (size_t i = 0; i < vars.size(); i++) {
         if (!util::contains(indexVarDomains, vars[i])) {
           indexVarDomains.insert({vars[i], type.getShape().getDimension(i)});
@@ -1011,6 +1220,11 @@ Assignment::Assignment(TensorVar tensor, vector<IndexVar> indices,
     : Assignment(Access(tensor, indices), rhs, op) {
 }
 
+Assignment::Assignment(TensorVar tensor, vector<IndexVarExpr> indices,
+                       IndexExpr rhs, IndexExpr op)
+    : Assignment(Access(tensor, indices), rhs, op) {
+}
+
 Access Assignment::getLhs() const {
   return getNode(*this)->lhs;
 }
@@ -1023,17 +1237,17 @@ IndexExpr Assignment::getOperator() const {
   return getNode(*this)->op;
 }
 
-const std::vector<IndexVar>& Assignment::getFreeVars() const {
-  return getLhs().getIndexVars();
+std::vector<IndexVar> Assignment::getFreeVars() const {
+  return ::taco::getIndexVars(getLhs());
 }
 
 std::vector<IndexVar> Assignment::getReductionVars() const {
-  vector<IndexVar> freeVars = getLhs().getIndexVars();
+  vector<IndexVar> freeVars = getFreeVars();
   set<IndexVar> seen(freeVars.begin(), freeVars.end());
   vector<IndexVar> reductionVars;
   match(getRhs(),
     std::function<void(const AccessNode*)>([&](const AccessNode* op) {
-    for (auto& var : op->indexVars) {
+    for (auto& var : Access(op).getIndexVars()) {
       if (!util::contains(seen, var)) {
         reductionVars.push_back(var);
         seen.insert(var);
@@ -1334,7 +1548,7 @@ Assignment TensorVar::operator=(IndexExpr expr) {
   taco_uassert(getOrder() == 0)
       << "Must use index variable on the left-hand-side when assigning an "
       << "expression to a non-scalar tensor.";
-  Assignment assignment = Assignment(*this, {}, expr);
+  Assignment assignment = Assignment(*this, std::vector<IndexVar>(), expr);
   check(assignment);
   return assignment;
 }
@@ -1343,7 +1557,7 @@ Assignment TensorVar::operator+=(IndexExpr expr) {
   taco_uassert(getOrder() == 0)
       << "Must use index variable on the left-hand-side when assigning an "
       << "expression to a non-scalar tensor.";
-  Assignment assignment = Assignment(*this, {}, expr, new AddNode);
+  Assignment assignment = Assignment(*this, std::vector<IndexVar>(), expr, new AddNode);
   check(assignment);
   return assignment;
 }
@@ -1366,7 +1580,7 @@ static bool isValid(Assignment assignment, string* reason) {
   auto rhs = assignment.getRhs();
   auto lhs = assignment.getLhs();
   auto result = lhs.getTensorVar();
-  auto freeVars = lhs.getIndexVars();
+  auto freeVars = getIndexVars(lhs);
   auto shape = result.getType().getShape();
   if(!error::dimensionsTypecheck(freeVars, rhs, shape)) {
     *reason = error::expr_dimension_mismatch + " " +
@@ -1472,7 +1686,7 @@ bool isReductionNotation(IndexStmt stmt, std::string* reason) {
       boundVars.unscope();
     }),
     std::function<void(const AccessNode*)>([&](const AccessNode* op) {
-      for (auto& var : op->indexVars) {
+      for (auto& var : Access(op).getIndexVars()) {
         if (!boundVars.contains(var)) {
           *reason = "all reduction variables in reduction notation must be "
                     "bound by a reduction expression";
@@ -1502,7 +1716,7 @@ bool isConcreteNotation(IndexStmt stmt, std::string* reason) {
       boundVars.unscope();
     }),
     std::function<void(const AccessNode*)>([&](const AccessNode* op) {
-      for (auto& var : op->indexVars) {
+      for (auto& var : getIndexVars(Access(op))) {
         if (!boundVars.contains(var)) {
           *reason = "all variables in concrete notation must be bound by a "
                     "forall statement.";
@@ -1538,7 +1752,7 @@ bool isConcreteNotation(IndexStmt stmt, std::string* reason) {
 
 Assignment makeReductionNotation(Assignment assignment) {
   IndexExpr expr = assignment.getRhs();
-  std::vector<IndexVar> free = assignment.getLhs().getIndexVars();
+  std::vector<IndexVar> free = getIndexVars(assignment.getLhs());
   if (!isEinsumNotation(assignment)) {
     return assignment;
   }
@@ -1814,6 +2028,21 @@ std::vector<TensorVar> getTensorVars(IndexStmt stmt) {
   return util::combine(results, util::combine(inputs, temps));
 }
 
+struct GetIndexVarsFromIndex : IndexVarExprVisitor {
+  vector<IndexVar> indexVars;
+  set<IndexVar> seen;
+
+  using IndexVarExprVisitor::visit;
+
+  void visit(const IndexVarAccessNode* node) {
+    const auto var = node->ivar;
+    if (!util::contains(seen, var)) {
+      seen.insert(var);
+      indexVars.push_back(var);
+    }
+  }
+};
+
 struct GetIndexVars : IndexNotationVisitor {
   vector<IndexVar> indexVars;
   set<IndexVar> seen;
@@ -1835,11 +2064,19 @@ struct GetIndexVars : IndexNotationVisitor {
   }
 
   void visit(const AccessNode* node) {
-    add(node->indexVars);
+    for (const auto index : node->indices) {
+      GetIndexVarsFromIndex visitor;
+      index.accept(&visitor);
+      add(visitor.indexVars);
+    }
   }
 
   void visit(const AssignmentNode* node) {
-    add(node->lhs.getIndexVars());
+    for (const auto index : node->lhs.getIndices()) {
+      GetIndexVarsFromIndex visitor;
+      index.accept(&visitor);
+      add(visitor.indexVars);
+    }
     IndexNotationVisitor::visit(node->rhs);
   }
 };
@@ -1849,7 +2086,6 @@ vector<IndexVar> getIndexVars(IndexStmt stmt) {
   stmt.accept(&visitor);
   return visitor.indexVars;
 }
-
 
 vector<IndexVar> getIndexVars(IndexExpr expr) {
   GetIndexVars visitor;

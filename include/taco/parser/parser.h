@@ -15,6 +15,7 @@ class TensorBase;
 class Format;
 class IndexVar;
 class IndexExpr;
+class IndexVarExpr;
 class Access;
 
 namespace parser {
@@ -83,8 +84,30 @@ private:
   ///          | identifier
   Access parseAccess();
 
-  /// varlist ::= var {, var}
-  std::vector<IndexVar> parseVarList();
+  /// varlist ::= varexpr {',' varexpr}
+  ///           | varcount
+  std::vector<IndexVarExpr> parseVarList();
+
+  /// varexpr ::= varterm {('+' | '-') varterm}
+  IndexVarExpr parseVarExpr();
+
+  /// varterm ::= varfactor {('*' | '/') varfactor}
+  IndexVarExpr parseVarTerm();
+
+  /// varfactor ::= varfinal
+  ///             | '(' varexpr ')'
+  IndexVarExpr parseVarFactor();
+
+  /// varfinal ::= var
+  ///            | scalar
+  IndexVarExpr parseVarFinal();
+
+  /// vars ::= var {',' var}
+  std::vector<IndexVar> parseVars();
+
+  /// varcount ::= '#' '(' vars ')'
+  ///            | '#' var
+  IndexVarExpr parseVarCount();
 
   /// var ::= identifier
   IndexVar parseVar();

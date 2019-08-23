@@ -9,7 +9,14 @@ namespace taco {
 
 class IndexStmt;
 class IndexExpr;
+class IndexVarExpr;
 class TensorVar;
+
+struct IndexVarAccessNode;
+struct IndexVarLiteralNode;
+struct IndexVarSubNode;
+struct IndexVarDivNode;
+struct BinaryIndexVarExprNode;
 
 struct AccessNode;
 struct LiteralNode;
@@ -31,6 +38,33 @@ struct ForallNode;
 struct WhereNode;
 struct MultiNode;
 struct SequenceNode;
+
+class IndexVarExprVisitorStrict {
+public:
+  virtual ~IndexVarExprVisitorStrict();
+
+  void visit(const IndexVarExpr&);
+
+  virtual void visit(const IndexVarAccessNode*) = 0;
+  virtual void visit(const IndexVarLiteralNode*) = 0;
+  virtual void visit(const IndexVarSubNode*) = 0;
+  virtual void visit(const IndexVarDivNode*) = 0;
+};
+
+/// Visit nodes in an index var expression.
+class IndexVarExprVisitor : public IndexVarExprVisitorStrict {
+public:
+  virtual ~IndexVarExprVisitor();
+
+  using IndexVarExprVisitorStrict::visit;
+
+  // Index Expressions
+  virtual void visit(const IndexVarAccessNode* node);
+  virtual void visit(const IndexVarLiteralNode* node);
+  virtual void visit(const IndexVarSubNode* node);
+  virtual void visit(const IndexVarDivNode* node);
+  virtual void visit(const BinaryIndexVarExprNode* node);
+};
 
 /// Visit the nodes in an expression.  This visitor provides some type safety
 /// by requing all visit methods to be overridden.

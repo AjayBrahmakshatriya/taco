@@ -147,16 +147,16 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       function<void(const AssignmentNode*, Matcher*)>([&](
           const AssignmentNode* n, Matcher* m) {
         m->match(n->rhs);
-        if (!dimension.defined()) {
-          auto ivars = n->lhs.getIndexVars();
-          int loc = (int)distance(ivars.begin(),
-                                  find(ivars.begin(),ivars.end(), indexVar));
-          dimension = GetProperty::make(tensorVars.at(n->lhs.getTensorVar()),
-                                        TensorProperty::Dimension, loc);
-        }
+        //if (!dimension.defined()) {
+        //  auto ivars = n->lhs.getIndexVars();
+        //  int loc = (int)distance(ivars.begin(),
+        //                          find(ivars.begin(),ivars.end(), indexVar));
+        //  dimension = GetProperty::make(tensorVars.at(n->lhs.getTensorVar()),
+        //                                TensorProperty::Dimension, loc);
+        //}
       }),
       function<void(const AccessNode*)>([&](const AccessNode* n) {
-        auto indexVars = n->indexVars;
+        const auto indexVars = Access(n).getIndexVars();
         if (util::contains(indexVars, indexVar)) {
           int loc = (int)distance(indexVars.begin(),
                                   find(indexVars.begin(),indexVars.end(),
@@ -261,6 +261,7 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment) {
     else {
       Expr values = GetProperty::make(var, TensorProperty::Values);
       Expr loc = generateValueLocExpr(assignment.getLhs());
+      std::cout << assignment.getLhs() << std::endl;
 
       Stmt computeStmt;
       if (!assignment.getOperator().defined()) {
@@ -1133,7 +1134,7 @@ Stmt LowererImpl::initResultArrays(IndexVar var, vector<Access> writes,
       result.push_back(VarDecl::make(begin, resultIterator.getPosVar()));
     }
 
-    const bool isTopLevel = (iterators.size() == write.getIndexVars().size());
+    const bool isTopLevel = (iterators.size() == write.getIndices().size());
     if (resultIterator.getParent().hasAppend() || isTopLevel) {
       Expr resultParentPos = resultIterator.getParent().getPosVar();
       Expr resultParentPosNext = simplify(ir::Add::make(resultParentPos, 1));

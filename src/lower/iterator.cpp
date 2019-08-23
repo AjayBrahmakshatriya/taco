@@ -398,13 +398,12 @@ Iterators Iterators::make(IndexStmt stmt,
       taco_iassert(n->tensorVar.getOrder() == format.getOrder())
           << n->tensorVar << ", Format" << format;
 
-      set<IndexVar> vars(n->indexVars.begin(), n->indexVars.end());
-
       Iterator parent(tensorVarIR);
       levelIterators.insert({{Access(n),0}, parent});
 
       int level = 1;
       ModeFormat parentModeType;
+      std::vector<IndexVar> computedIndexVars(format.getOrder());
       for (ModeFormatPack modeTypePack : format.getModeFormatPacks()) {
         vector<Expr> arrays;
         taco_iassert(modeTypePack.getModeFormats().size() > 0);
@@ -418,7 +417,9 @@ Iterators Iterators::make(IndexStmt stmt,
         for (auto& modeType : modeTypePack.getModeFormats()) {
           int modeNumber = format.getModeOrdering()[level-1];
           Dimension dim = shape.getDimension(modeNumber);
-          IndexVar indexVar = n->indexVars[modeNumber];
+          IndexVar indexVar = isa<IndexVarAccess>(n->indices[modeNumber]) 
+                            ? to<IndexVarAccess>(n->indices[modeNumber]).getIndexVar() 
+                            : computedIndexVars[modeNumber];
           Mode mode(tensorVarIR, dim, level, modeType, modePack, pos,
                     parentModeType);
 

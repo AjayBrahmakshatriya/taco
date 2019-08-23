@@ -9,6 +9,42 @@
 namespace taco {
 
 
+/// Extend this class to rewrite all index var expressions.
+class IndexVarExprRewriterStrict : public IndexVarExprVisitorStrict {
+public:
+  virtual ~IndexVarExprRewriterStrict() {}
+
+  /// Rewrite an index var expression.
+  IndexVarExpr rewrite(IndexVarExpr);
+
+protected:
+  /// Assign to expr in visit methods to replace the visited expr.
+  IndexVarExpr expr;
+
+  using IndexVarExprVisitorStrict::visit;
+
+  virtual void visit(const IndexVarAccessNode*) = 0;
+  virtual void visit(const IndexVarLiteralNode*) = 0;
+  virtual void visit(const IndexVarSubNode*) = 0;
+  virtual void visit(const IndexVarDivNode*) = 0;
+};
+
+
+/// Extend this class to rewrite some index expressions and statements.
+class IndexVarExprRewriter : public IndexVarExprRewriterStrict {
+public:
+  virtual ~IndexVarExprRewriter() {}
+
+protected:
+  using IndexVarExprRewriterStrict::visit;
+
+  virtual void visit(const IndexVarAccessNode* op);
+  virtual void visit(const IndexVarLiteralNode* op);
+  virtual void visit(const IndexVarSubNode* op);
+  virtual void visit(const IndexVarDivNode* op);
+};
+
+
 /// Extend this class to rewrite all index expressions.
 class IndexExprRewriterStrict : public IndexExprVisitorStrict {
 public:
