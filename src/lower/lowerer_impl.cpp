@@ -238,9 +238,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       const auto initPoint = std::mismatch(rhsFreeVars.begin(), 
                                            rhsFreeVars.end(), 
                                            expr->indexVars.begin());
-      std::cout << *initPoint.first << std::endl;
-      std::cout << (initPoint.second - expr->indexVars.begin()) << std::endl;
-      std::cout << (expr->indexVars.end() - initPoint.second) << std::endl;
       const bool useArrayForCounter = (expr->indexVars.end() - initPoint.second);
       Counter counter;
       if (useArrayForCounter) {
@@ -249,7 +246,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       counter.count = Var::make(util::uniqueName("count"), Int());
       counter.initPoint = *(initPoint.first);
       counter.indices = std::vector<IndexVar>(initPoint.second, expr->indexVars.end());
-      std::cout << util::join(counter.indices) << std::endl;
       counters[expr->indexVars] = counter;
     }
 
@@ -316,7 +312,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       Expr counterArraySize = getCardinality(counter.second.indices);
       allocCounterStmts.push_back(VarDecl::make(counterArray, 0));
       allocCounterStmts.push_back(Allocate::make(counterArray, counterArraySize));
-      //freeCounterStmts.push_back(
+      freeCounterStmts.push_back(Free::make(counterArray));
     }
   }
   Stmt allocCounters = Block::make(allocCounterStmts);
