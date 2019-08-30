@@ -74,6 +74,17 @@ struct IndexVarDivNode : public BinaryIndexVarExprNode {
 };
 
 
+struct IndexVarCountNode : public IndexVarExprNode {
+  IndexVarCountNode(const std::vector<IndexVar>& indexVars) : indexVars(indexVars) {}
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  std::vector<IndexVar> indexVars;
+};
+
+
 struct AccessNode : public IndexExprNode {
   AccessNode(TensorVar tensorVar, const std::vector<IndexVar>& indices)
       : IndexExprNode(tensorVar.getType().getDataType()), tensorVar(tensorVar) {

@@ -5,15 +5,24 @@
 #include <map>
 #include <set>
 #include <memory>
+#include <utility>
 
 #include "taco/lower/iterator.h"
 #include "taco/util/scopedset.h"
 #include "taco/util/uncopyable.h"
+#include "taco/index_notation/index_notation.h"
 
 namespace taco {
 
 class TensorVar;
 class IndexVar;
+
+class IndexVarExpr;
+class IndexVarAccess;
+class IndexVarLiteral;
+class IndexVarSub;
+class IndexVarDiv;
+class IndexVarCount;
 
 class IndexStmt;
 class Assignment;
@@ -112,7 +121,7 @@ protected:
    *       IR code to compute the forall loop.
    */
   virtual ir::Stmt lowerMergeLattice(MergeLattice lattice, ir::Expr coordinate,
-                                     IndexStmt statement, 
+                                     Forall statement, 
                                      const std::set<Access>& reducedAccesses);
 
   /**
@@ -130,16 +139,16 @@ protected:
    *      sparse iteration space region described by the merge point.
    */
   virtual ir::Stmt lowerMergePoint(MergeLattice pointLattice,
-                                   ir::Expr coordinate, IndexStmt statement,
+                                   ir::Expr coordinate, Forall statement,
                                    const std::set<Access>& reducedAccesses);
 
   /// Lower a merge lattice to cases.
-  virtual ir::Stmt lowerMergeCases(ir::Expr coordinate, IndexStmt stmt,
+  virtual ir::Stmt lowerMergeCases(ir::Expr coordinate, Forall stmt,
                                    MergeLattice lattice,
                                    const std::set<Access>& reducedAccesses);
 
   /// Lower a forall loop body.
-  virtual ir::Stmt lowerForallBody(ir::Expr coordinate, IndexStmt stmt,
+  virtual ir::Stmt lowerForallBody(ir::Expr coordinate, Forall stmt,
                                    std::vector<Iterator> locaters,
                                    std::vector<Iterator> inserters,
                                    std::vector<Iterator> appenders,
@@ -186,12 +195,30 @@ protected:
   /// Lower an intrinsic function call expression.
   virtual ir::Expr lowerCallIntrinsic(CallIntrinsic call);
 
+  /// Lower an index variable access expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarAccess(IndexVarAccess access);
+  
+  /// Lower an index variable literal expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarLiteral(IndexVarLiteral access);
 
-  /// Lower a concrete index variable statement.
+  /// Lower an index variable subtraction expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarSub(IndexVarSub access);
+
+  /// Lower an index variable division expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarDiv(IndexVarDiv access);
+
+  /// Lower an index variable count expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarCount(IndexVarCount access);
+
+
+  /// Lower a concrete index notation statement.
   ir::Stmt lower(IndexStmt stmt);
 
-  /// Lower a concrete index variable expression.
+  /// Lower a concrete index notation expression.
   ir::Expr lower(IndexExpr expr);
+
+  /// Lower a concrete index notation index variable expression.
+  std::pair<ir::Stmt,ir::Expr> lower(IndexVarExpr expr);
 
 
   /// Check whether the lowerer should generate code to assemble result indices.
@@ -211,6 +238,10 @@ protected:
   /// which is encoded as the interval [0, result).
   ir::Expr getDimension(IndexVar indexVar) const;
 
+  ir::Expr getCardinality(IndexVar indexVar) const;
+
+  ir::Expr getCardinality(const std::vector<IndexVar>& indexVars) const;
+
   /// Retrieve the chain of iterators that iterate over the access expression.
   std::vector<Iterator> getIterators(Access) const;
 
@@ -225,6 +256,15 @@ protected:
 
   /// Retrieve the coordinate IR variable corresponding to an iterator.
   ir::Expr getCoordinateVar(Iterator) const;
+
+  struct Counter {
+    ir::Expr array;                 // (Optional) array storing counters for different indices
+    ir::Expr count;                 // Scalar variable storing current value of counter to be broadcasted
+    IndexVar initPoint;             // Level at which counter needs to be (re)initialized
+    std::vector<IndexVar> indices;  // Indices into counters array
+  };
+
+  Counter getCounter(const std::vector<IndexVar>& indexVars) const;
 
   /**
    * Retrieve the resolved coordinate variables of an iterator and it's parent
@@ -325,6 +365,12 @@ protected:
   /// Expression that evaluates to true if none of the iteratators are exhausted
   ir::Expr checkThatNoneAreExhausted(std::vector<Iterator> iterators);
 
+  ir::Stmt getCounterCounts(Forall forall) const;
+
+  ir::Stmt incrementCounters(Forall forall) const;
+
+  ir::Expr generateDenseArrayIndex(const std::vector<IndexVar>& indexVars) const;
+
 private:
   bool assemble;
   bool compute;
@@ -350,10 +396,15 @@ private:
   /// Set of locate-capable iterators that can be legally accessed.
   util::ScopedSet<Iterator> accessibleIterators;
 
+  std::map<std::vector<IndexVar>, Counter> counters;
+
   class Visitor;
   friend class Visitor;
   std::shared_ptr<Visitor> visitor;
 
+  class IndexVisitor;
+  friend class IndexVisitor;
+  std::shared_ptr<IndexVisitor> ivisitor;
 };
 
 }

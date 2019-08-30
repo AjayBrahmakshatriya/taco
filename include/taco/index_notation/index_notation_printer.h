@@ -18,6 +18,7 @@ public:
   void visit(const IndexVarLiteralNode*);
   void visit(const IndexVarSubNode*);
   void visit(const IndexVarDivNode*);
+  void visit(const IndexVarCountNode*);
 
 private:
   std::ostream& os;

@@ -85,7 +85,6 @@ private:
   Access parseAccess();
 
   /// varlist ::= varexpr {',' varexpr}
-  ///           | varcount
   std::vector<IndexVarExpr> parseVarList();
 
   /// varexpr ::= varterm {('+' | '-') varterm}
@@ -100,14 +99,15 @@ private:
 
   /// varfinal ::= var
   ///            | scalar
+  ///            | varcount
   IndexVarExpr parseVarFinal();
-
-  /// vars ::= var {',' var}
-  std::vector<IndexVar> parseVars();
 
   /// varcount ::= '#' '(' vars ')'
   ///            | '#' var
   IndexVarExpr parseVarCount();
+
+  /// vars ::= var {',' var}
+  std::vector<IndexVar> parseVars();
 
   /// var ::= identifier
   IndexVar parseVar();

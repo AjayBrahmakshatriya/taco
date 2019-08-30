@@ -32,6 +32,9 @@ void IndexVarExprVisitor::visit(const IndexVarDivNode* op) {
   visit(static_cast<const BinaryIndexVarExprNode*>(op));
 }
 
+void IndexVarExprVisitor::visit(const IndexVarCountNode* op) {
+}
+
 void IndexVarExprVisitor::visit(const BinaryIndexVarExprNode* op) {
   op->a.accept(this);
   op->b.accept(this);

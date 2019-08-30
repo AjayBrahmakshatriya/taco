@@ -37,6 +37,7 @@ struct IndexVarAccessNode;
 struct IndexVarLiteralNode;
 struct IndexVarSubNode;
 struct IndexVarDivNode;
+struct IndexVarCountNode;
 
 struct AccessNode;
 struct LiteralNode;
@@ -125,9 +126,9 @@ public:
 };
 
 
-/// A sub expression subtracts two index vars.
+/// A sub expression subtracts two index var expressions.
 /// ```
-/// a(i-j)
+/// A(i-j,i,j) = B(i,j)
 /// ```
 class IndexVarSub : public IndexVarExpr {
 public:
@@ -142,9 +143,9 @@ public:
 };
 
 
-/// An div expression divides two index vars.
+/// An div expression divides two index var expressions.
 /// ```
-/// a(i/2)
+/// a(i/2) = b(i)
 /// ```
 class IndexVarDiv : public IndexVarExpr {
 public:
@@ -156,6 +157,23 @@ public:
   IndexVarExpr getB() const;
 
   typedef IndexVarDivNode Node;
+};
+
+
+/// A count expression maps repeated occurrences of coordinates in the result 
+/// to integers between 0 and #(occurrences of coordinates).
+/// ```
+/// A(count(i),i,j) = B(i,j)
+/// ```
+class IndexVarCount : public IndexVarExpr {
+public:
+  IndexVarCount();
+  IndexVarCount(const IndexVarCountNode*);
+  IndexVarCount(const std::vector<IndexVar>& indexVars);
+
+  const std::vector<IndexVar>& getIndexVars() const;
+
+  typedef IndexVarCountNode Node;
 };
 
 

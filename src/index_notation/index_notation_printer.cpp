@@ -45,6 +45,10 @@ void IndexVarExprPrinter::visit(const IndexVarDivNode* op) {
   visitBinary(op, Precedence::DIV);
 }
 
+void IndexVarExprPrinter::visit(const IndexVarCountNode* op) {
+  os << "count(" << util::join(op->indexVars, ",") << ")";
+}
+
 IndexNotationPrinter::IndexNotationPrinter(std::ostream& os) : os(os) {
 }
 

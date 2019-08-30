@@ -430,9 +430,22 @@ IndexVarExpr Parser::parseVarFinal() {
       value >> uint_value;
       return IndexVarExpr(uint_value);
     }
+    case Token::hash:
+      return parseVarCount();
     default:
       return parseVar();
   }
+}
+
+IndexVarExpr Parser::parseVarCount() {
+  consume(Token::hash);
+  if (content->currentToken == Token::lparen) {
+    consume(Token::lparen);
+    const auto vars = parseVars();
+    consume(Token::rparen);
+    return IndexVarCount(vars);
+  }
+  return IndexVarCount({parseVar()});
 }
 
 vector<IndexVar> Parser::parseVars() {

@@ -16,6 +16,7 @@ struct IndexVarAccessNode;
 struct IndexVarLiteralNode;
 struct IndexVarSubNode;
 struct IndexVarDivNode;
+struct IndexVarCountNode;
 struct BinaryIndexVarExprNode;
 
 struct AccessNode;
@@ -49,6 +50,7 @@ public:
   virtual void visit(const IndexVarLiteralNode*) = 0;
   virtual void visit(const IndexVarSubNode*) = 0;
   virtual void visit(const IndexVarDivNode*) = 0;
+  virtual void visit(const IndexVarCountNode*) = 0;
 };
 
 /// Visit nodes in an index var expression.
@@ -63,6 +65,7 @@ public:
   virtual void visit(const IndexVarLiteralNode* node);
   virtual void visit(const IndexVarSubNode* node);
   virtual void visit(const IndexVarDivNode* node);
+  virtual void visit(const IndexVarCountNode* node);
   virtual void visit(const BinaryIndexVarExprNode* node);
 };
 

@@ -17,6 +17,7 @@
 #include "taco/index_notation/transformations.h"
 #include "taco/index_notation/index_notation_nodes.h"
 #include "taco/index_notation/index_notation_rewriter.h"
+#include "taco/index_notation/index_notation_visitor.h"
 #include "taco/index_notation/index_notation_printer.h"
 #include "taco/ir/ir.h"
 
@@ -102,6 +103,19 @@ struct IndexVarEquals : public IndexVarExprVisitorStrict {
 
   void visit(const IndexVarDivNode* anode) {
     eq = binaryEquals(anode, bExpr);
+  }
+  
+  void visit(const IndexVarCountNode* anode) {
+    if (!isa<IndexVarCountNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<IndexVarCountNode>(bExpr.ptr);
+    if (anode->indexVars != bnode->indexVars) {
+      eq = false;
+      return;
+    }
+    eq = true;
   }
 };
 
@@ -221,6 +235,31 @@ template <> bool isa<IndexVarDiv>(IndexVarExpr e) {
 template <> IndexVarDiv to<IndexVarDiv>(IndexVarExpr e) {
   taco_iassert(isa<IndexVarDiv>(e));
   return IndexVarDiv(to<IndexVarDivNode>(e.ptr));
+}
+
+
+// class IndexVarCount
+IndexVarCount::IndexVarCount() : IndexVarCount(new IndexVarCountNode({})) {
+}
+
+IndexVarCount::IndexVarCount(const IndexVarCountNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarCount::IndexVarCount(const std::vector<IndexVar>& indexVars)
+    : IndexVarCount(new IndexVarCountNode(indexVars)) {
+}
+
+const std::vector<IndexVar>& IndexVarCount::getIndexVars() const {
+  return getNode(*this)->indexVars;
+}
+
+template <> bool isa<IndexVarCount>(IndexVarExpr s) {
+  return isa<IndexVarCountNode>(s.ptr);
+}
+
+template <> IndexVarCount to<IndexVarCount>(IndexVarExpr s) {
+  taco_iassert(isa<IndexVarCount>(s));
+  return IndexVarCount(to<IndexVarCountNode>(s.ptr));
 }
 
 
@@ -597,13 +636,7 @@ const std::vector<IndexVarExpr>& Access::getIndices() const {
 }
 
 std::vector<IndexVar> Access::getIndexVars() const {
-  // TODO: Use visitor to traverse index var exprs
-  std::vector<IndexVar> indexVars;
-  for (const auto& index : getNode(*this)->indices) {
-    const auto ivar = to<IndexVarAccess>(index);
-    indexVars.push_back(ivar.getIndexVar());
-  }
-  return indexVars;
+  return ::taco::getIndexVars(*this);
 }
 
 static void check(Assignment assignment) {
@@ -1142,12 +1175,7 @@ std::vector<IndexVar> IndexStmt::getIndexVars() const {
   match(*this,
     std::function<void(const AssignmentNode*,Matcher*)>([&](
         const AssignmentNode* op, Matcher* ctx) {
-      //for (auto& var : op->lhs.getIndexVars()) {
-      //  if (!util::contains(seen, var)) {
-      //    vars.push_back(var);
-      //    seen.insert(var);
-      //  }
-      //}
+      ctx->match(op->lhs);
       ctx->match(op->rhs);
     }),
     std::function<void(const AccessNode*)>([&](const AccessNode* op) {
@@ -2039,6 +2067,15 @@ struct GetIndexVarsFromIndex : IndexVarExprVisitor {
     if (!util::contains(seen, var)) {
       seen.insert(var);
       indexVars.push_back(var);
+    }
+  }
+
+  void visit(const IndexVarCountNode* node) {
+    for (const auto var : node->indexVars) {
+      if (!util::contains(seen, var)) {
+        seen.insert(var);
+        indexVars.push_back(var);
+      }
     }
   }
 };

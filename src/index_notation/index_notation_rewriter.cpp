@@ -80,6 +80,10 @@ void IndexVarExprRewriter::visit(const IndexVarDivNode* op) {
   expr = visitBinaryOp(op, this);
 }
 
+void IndexVarExprRewriter::visit(const IndexVarCountNode* op) {
+  expr = op;
+}
+
 
 // class IndexExprRewriter
 void IndexNotationRewriter::visit(const AccessNode* op) {

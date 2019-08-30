@@ -11,6 +11,9 @@
 #include "taco/lower/merge_lattice.h"
 #include "mode_access.h"
 #include "taco/util/collections.h"
+#include "taco/util/name_generator.h"
+
+#include <algorithm>
 
 using namespace std;
 using namespace taco::ir;
@@ -59,7 +62,28 @@ private:
   }
 };
 
-LowererImpl::LowererImpl() : visitor(new Visitor(this)) {
+class LowererImpl::IndexVisitor : public IndexVarExprVisitorStrict {
+public:
+  IndexVisitor(LowererImpl* impl) : impl(impl) {}
+  std::pair<Stmt,Expr> lower(IndexVarExpr expr) {
+    this->expr = std::pair<Stmt,Expr>();
+    IndexVarExprVisitorStrict::visit(expr);
+    return this->expr;
+  }
+private:
+  LowererImpl* impl;
+  std::pair<Stmt,Expr> expr;
+  using IndexVarExprVisitorStrict::visit;
+  void visit(const IndexVarAccessNode* node)  { expr = impl->lowerIndexVarAccess(node); }
+  void visit(const IndexVarLiteralNode* node) { expr = impl->lowerIndexVarLiteral(node); }
+  void visit(const IndexVarSubNode* node)     { expr = impl->lowerIndexVarSub(node); }
+  void visit(const IndexVarDivNode* node)     { expr = impl->lowerIndexVarDiv(node); }
+  void visit(const IndexVarCountNode* node)   { expr = impl->lowerIndexVarCount(node); }
+};
+
+LowererImpl::LowererImpl() : 
+    visitor(new Visitor(this)), 
+    ivisitor(new IndexVisitor(this)) {
 }
 
 
@@ -100,6 +124,35 @@ static bool hasStores(Stmt stmt) {
     }
   };
   return stmt.defined() && FindStores().hasStores(stmt);
+}
+
+static std::vector<IndexVar> getRhsFreeVars(IndexStmt stmt) {
+  std::vector<IndexVar> result;
+  match(stmt,
+    function<void(const AssignmentNode*, Matcher*)>([&](
+        const AssignmentNode* n, Matcher* m) {
+      const auto rhsVars = getIndexVars(n->rhs);
+      const auto reductionVars = Assignment(n).getReductionVars();
+      std::vector<IndexVar> freeVarsInRHS;
+      for (const auto ivar : result) {
+        if (util::contains(rhsVars, ivar) && 
+            !util::contains(reductionVars, ivar)) {
+          freeVarsInRHS.push_back(ivar);
+        }
+      }
+      result = freeVarsInRHS;
+    }),
+    function<void(const ForallNode*, Matcher*)>([&](
+        const ForallNode* n, Matcher* m) {
+      result.push_back(n->indexVar);
+      m->match(n->stmt);
+    }),
+    function<void(const WhereNode*, Matcher*)>([&](
+        const WhereNode* n, Matcher* m) {
+      m->match(n->consumer);
+    })
+  );
+  return result; 
 }
 
 Stmt
@@ -147,13 +200,17 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       function<void(const AssignmentNode*, Matcher*)>([&](
           const AssignmentNode* n, Matcher* m) {
         m->match(n->rhs);
-        //if (!dimension.defined()) {
-        //  auto ivars = n->lhs.getIndexVars();
-        //  int loc = (int)distance(ivars.begin(),
-        //                          find(ivars.begin(),ivars.end(), indexVar));
-        //  dimension = GetProperty::make(tensorVars.at(n->lhs.getTensorVar()),
-        //                                TensorProperty::Dimension, loc);
-        //}
+        if (!dimension.defined()) {
+          for (size_t i = 0; i < n->lhs.getIndices().size(); ++i) {
+            if (isa<IndexVarAccess>(n->lhs.getIndices()[i])) {
+              const auto ivar = to<IndexVarAccess>(n->lhs.getIndices()[i]).getIndexVar();
+              if (ivar == indexVar) {
+                dimension = GetProperty::make(tensorVars.at(n->lhs.getTensorVar()),
+                                              TensorProperty::Dimension, i);
+              }
+            }
+          }
+        }
       }),
       function<void(const AccessNode*)>([&](const AccessNode* n) {
         const auto indexVars = Access(n).getIndexVars();
@@ -166,8 +223,51 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         }
       })
     );
+    taco_iassert(dimension.defined());
     dimensions.insert({indexVar, dimension});
   }
+
+  struct GenerateCounters : public IndexVarExprVisitor {
+    GenerateCounters(std::map<std::vector<IndexVar>,Counter>& counters,
+                     const std::vector<IndexVar>& rhsFreeVars) : 
+        counters(counters), rhsFreeVars(rhsFreeVars) {}
+
+    using IndexVarExprVisitor::visit;
+
+    void visit(const IndexVarCountNode* expr) {
+      const auto initPoint = std::mismatch(rhsFreeVars.begin(), 
+                                           rhsFreeVars.end(), 
+                                           expr->indexVars.begin());
+      std::cout << *initPoint.first << std::endl;
+      std::cout << (initPoint.second - expr->indexVars.begin()) << std::endl;
+      std::cout << (expr->indexVars.end() - initPoint.second) << std::endl;
+      const bool useArrayForCounter = (expr->indexVars.end() - initPoint.second);
+      Counter counter;
+      if (useArrayForCounter) {
+        counter.array = Var::make(util::uniqueName("counters"), Int(), true);
+      }
+      counter.count = Var::make(util::uniqueName("count"), Int());
+      counter.initPoint = *(initPoint.first);
+      counter.indices = std::vector<IndexVar>(initPoint.second, expr->indexVars.end());
+      std::cout << util::join(counter.indices) << std::endl;
+      counters[expr->indexVars] = counter;
+    }
+
+    std::map<std::vector<IndexVar>,Counter>& counters;
+    const std::vector<IndexVar>& rhsFreeVars;
+  };
+
+  const auto rhsFreeVars = getRhsFreeVars(stmt);
+  GenerateCounters counterGen(this->counters, rhsFreeVars);
+  match(stmt,
+    function<void(const AssignmentNode*, Matcher*)>([&](
+        const AssignmentNode* n, Matcher* m) {
+      m->match(n->rhs);
+      for (const auto index : n->lhs.getIndices()) {
+        index.accept(&counterGen);
+      }
+    })
+  );
 
   // Define and initialize scalar results and arguments
   if (generateComputeCode()) {
@@ -207,6 +307,21 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // Declare and initialize non-scalar temporaries
   Stmt tempDefinitions = defineTemporaries(temporaries, scalars);
 
+  // Allocate and free counter arrays
+  std::vector<Stmt> allocCounterStmts;
+  std::vector<Stmt> freeCounterStmts;
+  for (const auto counter : this->counters) {
+    const auto counterArray = counter.second.array;
+    if (counterArray.defined()) {
+      Expr counterArraySize = getCardinality(counter.second.indices);
+      allocCounterStmts.push_back(VarDecl::make(counterArray, 0));
+      allocCounterStmts.push_back(Allocate::make(counterArray, counterArraySize));
+      //freeCounterStmts.push_back(
+    }
+  }
+  Stmt allocCounters = Block::make(allocCounterStmts);
+  Stmt freeCounters = Block::make(freeCounterStmts);
+
   // Lower the index statement to compute and/or assemble
   Stmt body = lower(stmt);
 
@@ -233,9 +348,11 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   return Function::make(name, resultsIR, argumentsIR,
                         Block::blanks(header,
                                       tempDefinitions,
+                                      allocCounters,
                                       initializeResults,
                                       body,
                                       finalizeResults,
+                                      freeCounters,
                                       footer));
 }
 
@@ -261,18 +378,43 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment) {
     else {
       Expr values = GetProperty::make(var, TensorProperty::Values);
       Expr loc = generateValueLocExpr(assignment.getLhs());
-      std::cout << assignment.getLhs() << std::endl;
 
-      Stmt computeStmt;
+      std::vector<Stmt> accessStmts;
+
+      Expr prevPos = 0;
+      size_t i = 0;
+      const auto resultIterators = getIterators(assignment.getLhs());
+      const auto resultIndices = assignment.getLhs().getIndices();
+      for (const auto it : util::zip(resultIterators, resultIndices)) {
+        const auto coord = lower(it.second);
+        accessStmts.push_back(coord.first);
+
+        Expr ivar;
+        if (!isa<IndexVarAccess>(it.second)) {
+          ivar = it.first.getCoordVar();
+          accessStmts.push_back(VarDecl::make(ivar, coord.second));
+        } else {
+          ivar = getCoordinateVar(it.first.getIndexVar());
+        }
+
+        const auto dim = result.getType().getShape().getDimension(i);
+        const auto stride = ir::Literal::make((int)dim.getSize());
+        Expr index = ir::Add::make(ir::Mul::make(prevPos, stride), ivar);
+        Expr pos = it.first.getPosVar();
+        accessStmts.push_back(VarDecl::make(pos, index));
+
+        prevPos = pos;
+        ++i;
+      }
+
       if (!assignment.getOperator().defined()) {
-        computeStmt = Store::make(values, loc, rhs);
+        accessStmts.push_back(Store::make(values, loc, rhs));
       }
       else {
-        computeStmt = compoundStore(values, loc, rhs);
+        accessStmts.push_back(compoundStore(values, loc, rhs));
       }
-      taco_iassert(computeStmt.defined());
 
-      return computeStmt;
+      return Block::make(accessStmts);
     }
   }
   // We're only assembling so defer allocating value memory to the end when
@@ -337,6 +479,24 @@ Stmt LowererImpl::lowerForall(Forall forall)
                                         getArgumentAccesses(forall), 
                                         reducedAccesses);
 
+  std::vector<Stmt> initCounterStmts;
+  for (const auto counter : this->counters) {
+    if (counter.second.initPoint == forall.getIndexVar()) {
+      const auto counterArray = counter.second.array;
+      const auto counterCount = counter.second.count;
+      if (counterArray.defined()) {
+        Expr counterArraySize = getCardinality(counter.second.indices);
+        Expr counterArrayIt = Var::make("it", Int());
+        Stmt zeroCounter = Store::make(counterArray, counterArrayIt, 0);
+        Stmt zeroLoop = For::make(counterArrayIt, 0, counterArraySize, 1, zeroCounter);
+        initCounterStmts.push_back(zeroLoop);
+      } else {
+        initCounterStmts.push_back(VarDecl::make(counterCount, 0));
+      }
+    }
+  }
+  Stmt initCounters = Block::make(initCounterStmts);
+
   Stmt loops;
   // Emit a loop that iterates over over a single iterator (optimization)
   if (lattice.iterators().size() == 1 && lattice.iterators()[0].isUnique()) {
@@ -370,7 +530,7 @@ Stmt LowererImpl::lowerForall(Forall forall)
   // Emit general loops to merge multiple iterators
   else {
     loops = lowerMergeLattice(lattice, getCoordinateVar(forall.getIndexVar()),
-                              forall.getStmt(), reducedAccesses);
+                              forall, reducedAccesses);
   }
   taco_iassert(loops.defined());
 
@@ -380,8 +540,9 @@ Stmt LowererImpl::lowerForall(Forall forall)
     loops = Stmt();
   }
 
-  return Block::blanks(preInitValues,
-                       loops);
+  return Block::make(preInitValues,
+                     initCounters,
+                     loops);
 }
 
 
@@ -393,7 +554,7 @@ Stmt LowererImpl::lowerForallDimension(Forall forall,
 {
   Expr coordinate = getCoordinateVar(forall.getIndexVar());
 
-  Stmt body = lowerForallBody(coordinate, forall.getStmt(),
+  Stmt body = lowerForallBody(coordinate, forall,
                               locators, inserters, appenders, reducedAccesses);
 
   Stmt posAppend = generateAppendPositions(appenders);
@@ -427,7 +588,7 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
                                            coordinates(iterator)).getResults()[0];
   Stmt declareCoordinate = VarDecl::make(coordinate, coordinateArray);
 
-  Stmt body = lowerForallBody(coordinate, forall.getStmt(),
+  Stmt body = lowerForallBody(coordinate, forall,
                               locators, inserters, appenders, reducedAccesses);
 
   // Code to append positions
@@ -466,7 +627,7 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
 }
 
 Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, Expr coordinate,
-                                    IndexStmt statement, 
+                                    Forall statement, 
                                     const std::set<Access>& reducedAccesses)
 {
   vector<Iterator> appenders = filter(lattice.results(),
@@ -478,7 +639,7 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, Expr coordinate,
   for (MergePoint point : lattice.points()) {
     // Each iteration of this loop generates a while loop for one of the merge
     // points in the merge lattice.
-    IndexStmt zeroedStmt = zero(statement, getExhaustedAccesses(point,lattice));
+    Forall zeroedStmt = to<Forall>(zero(statement, getExhaustedAccesses(point,lattice)));
     MergeLattice sublattice = lattice.subLattice(point);
     Stmt mergeLoop = lowerMergePoint(sublattice, coordinate, zeroedStmt, reducedAccesses);
     mergeLoopsVec.push_back(mergeLoop);
@@ -494,7 +655,7 @@ Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, Expr coordinate,
 }
 
 Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
-                                  ir::Expr coordinate, IndexStmt statement,
+                                  ir::Expr coordinate, Forall statement,
                                   const std::set<Access>& reducedAccesses)
 {
   MergePoint point = pointLattice.points().front();
@@ -580,7 +741,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
                                  incIteratorVarStmts));
 }
 
-Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexStmt stmt,
+Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, Forall stmt,
                                   MergeLattice lattice,
                                   const std::set<Access>& reducedAccesses)
 {
@@ -607,7 +768,7 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexStmt stmt,
       }
 
       // Construct case body
-      IndexStmt zeroedStmt = zero(stmt, getExhaustedAccesses(point, lattice));
+      Forall zeroedStmt = to<Forall>(zero(stmt, getExhaustedAccesses(point, lattice)));
       Stmt body = lowerForallBody(coordinate, zeroedStmt, {},
                                   inserters, appenders, reducedAccesses);
 
@@ -620,12 +781,15 @@ Stmt LowererImpl::lowerMergeCases(ir::Expr coordinate, IndexStmt stmt,
 }
 
 
-Stmt LowererImpl::lowerForallBody(Expr coordinate, IndexStmt stmt,
+Stmt LowererImpl::lowerForallBody(Expr coordinate, Forall stmt,
                                   vector<Iterator> locators,
                                   vector<Iterator> inserters,
                                   vector<Iterator> appenders,
                                   const set<Access>& reducedAccesses) {
   Stmt initVals = resizeAndInitValues(appenders, reducedAccesses);
+
+  // Code to access counters
+  Stmt getCounters = getCounterCounts(stmt);
 
   // Inserter positions
   Stmt declInserterPosVars = declLocatePosVars(inserters);
@@ -634,18 +798,23 @@ Stmt LowererImpl::lowerForallBody(Expr coordinate, IndexStmt stmt,
   Stmt declLocatorPosVars = declLocatePosVars(locators);
 
   // Code of loop body statement
-  Stmt body = lower(stmt);
+  Stmt body = lower(stmt.getStmt());
 
   // Code to append coordinates
   Stmt appendCoords = appendCoordinate(appenders, coordinate);
 
   // TODO: Emit code to insert coordinates
 
+  // Code to increment counters
+  Stmt incCounters = incrementCounters(stmt);
+
   return Block::make(initVals,
+                     getCounters,
                      declInserterPosVars,
                      declLocatorPosVars,
                      body,
-                     appendCoords);
+                     appendCoords,
+                     incCounters);
 }
 
 Stmt LowererImpl::lowerWhere(Where where) {
@@ -787,6 +956,38 @@ Expr LowererImpl::lowerCallIntrinsic(CallIntrinsic call) {
 }
 
 
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarAccess(IndexVarAccess access) {
+  return std::make_pair(Stmt(), getCoordinateVar(access.getIndexVar()));
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarLiteral(IndexVarLiteral lit) {
+  return std::make_pair(Stmt(), ir::Literal::make((int)lit.getVal()));
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarSub(IndexVarSub sub) {
+  const auto a = lower(sub.getA());
+  const auto b = lower(sub.getB());
+  const auto body = Block::make({a.first, b.first});
+  return std::make_pair(body, ir::Sub::make(a.second, b.second));
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarDiv(IndexVarDiv div) {
+  const auto a = lower(div.getA());
+  const auto b = lower(div.getB());
+  const auto body = Block::make({a.first, b.first});
+  return std::make_pair(body, ir::Div::make(a.second, b.second));
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarCount(IndexVarCount count) {
+  return std::make_pair(Stmt(), getCounter(count.getIndexVars()).count);
+}
+
+
+
 Stmt LowererImpl::lower(IndexStmt stmt) {
   return visitor->lower(stmt);
 }
@@ -794,6 +995,11 @@ Stmt LowererImpl::lower(IndexStmt stmt) {
 
 Expr LowererImpl::lower(IndexExpr expr) {
   return visitor->lower(expr);
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lower(IndexVarExpr expr) {
+  return ivisitor->lower(expr);
 }
 
 
@@ -822,6 +1028,21 @@ Expr LowererImpl::getCapacityVar(Expr tensor) const {
 Expr LowererImpl::getDimension(IndexVar indexVar) const {
   taco_iassert(util::contains(this->dimensions, indexVar)) << indexVar;
   return this->dimensions.at(indexVar);
+}
+        
+
+Expr LowererImpl::getCardinality(IndexVar indexVar) const {
+  return getDimension(indexVar);
+}
+
+
+Expr LowererImpl::getCardinality(const std::vector<IndexVar>& indexVars) const {
+  Expr size = 1;
+  for (const auto index : indexVars) {
+    const auto stride = getCardinality(index);
+    size = ir::Mul::make(size, stride);
+  }
+  return size;
 }
 
 
@@ -866,6 +1087,12 @@ Expr LowererImpl::getCoordinateVar(Iterator iterator) const {
       << util::join(this->indexVars);
   auto& indexVar = this->indexVars.at(iterator);
   return this->getCoordinateVar(indexVar);
+}
+
+
+LowererImpl::Counter
+LowererImpl::getCounter(const std::vector<IndexVar>& indexVars) const {
+  return this->counters.at(indexVars);
 }
 
 
@@ -1545,6 +1772,51 @@ Expr LowererImpl::checkThatNoneAreExhausted(std::vector<Iterator> iterators)
   return (!result.empty())
          ? conjunction(result)
          : Lt::make(iterators[0].getIteratorVar(), iterators[0].getEndVar());
+}
+
+
+Stmt LowererImpl::getCounterCounts(Forall forall) const {
+  std::vector<Stmt> accessStmts;
+  for (const auto counter : this->counters) {
+    const auto counterArray = counter.second.array;
+    if (counterArray.defined()) {
+      const auto counterCount = counter.second.count;
+      Expr index = generateDenseArrayIndex(counter.second.indices);
+      accessStmts.push_back(VarDecl::make(counterCount, Load::make(counterArray, index)));
+    }
+  }
+  return Block::make(accessStmts);
+}
+
+
+Stmt LowererImpl::incrementCounters(Forall forall) const {
+  const auto rhsFreeVars = getRhsFreeVars(forall);
+  if (rhsFreeVars.size() != 1 || rhsFreeVars[0] != forall.getIndexVar()) {
+    return Stmt();
+  }
+
+  std::vector<Stmt> incStmts;
+  for (const auto counter : this->counters) {
+    const auto counterArray = counter.second.array;
+    const auto counterCount = counter.second.count;
+    Expr incExpr = ir::Add::make(counterCount, 1);
+    if (counterArray.defined()) {
+      Expr index = generateDenseArrayIndex(counter.second.indices);
+      incStmts.push_back(Store::make(counterArray, index, incExpr));
+    } else {
+      incStmts.push_back(Assign::make(counterCount, incExpr));
+    }
+  }
+  return Block::make(incStmts);
+}
+
+
+Expr LowererImpl::generateDenseArrayIndex(const std::vector<IndexVar>& indexVars) const {
+  Expr pos = 0;
+  for (const auto ivar : indexVars) {
+    pos = ir::Add::make(ir::Mul::make(pos, getCardinality(ivar)), getCoordinateVar(ivar));
+  }
+  return pos;
 }
 
 }

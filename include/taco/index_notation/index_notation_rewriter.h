@@ -27,6 +27,7 @@ protected:
   virtual void visit(const IndexVarLiteralNode*) = 0;
   virtual void visit(const IndexVarSubNode*) = 0;
   virtual void visit(const IndexVarDivNode*) = 0;
+  virtual void visit(const IndexVarCountNode*) = 0;
 };
 
 
@@ -42,6 +43,7 @@ protected:
   virtual void visit(const IndexVarLiteralNode* op);
   virtual void visit(const IndexVarSubNode* op);
   virtual void visit(const IndexVarDivNode* op);
+  virtual void visit(const IndexVarCountNode* op);
 };
 
 
