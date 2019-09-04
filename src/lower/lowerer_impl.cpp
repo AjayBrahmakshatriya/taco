@@ -235,17 +235,24 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     using IndexVarExprVisitor::visit;
 
     void visit(const IndexVarCountNode* expr) {
+      // Get index variables used to index into counter, in the same order 
+      // index variables are nested.
+      std::vector<IndexVar> indexVars;
+      std::copy_if(rhsFreeVars.begin(), rhsFreeVars.end(), 
+                   std::back_inserter(indexVars), 
+                   [&](IndexVar ivar) { return util::contains(expr->indexVars, ivar); });
+
       const auto initPoint = std::mismatch(rhsFreeVars.begin(), 
                                            rhsFreeVars.end(), 
-                                           expr->indexVars.begin());
-      const bool useArrayForCounter = (expr->indexVars.end() - initPoint.second);
+                                           indexVars.begin());
+      const bool useArrayForCounter = (indexVars.end() - initPoint.second);
       Counter counter;
       if (useArrayForCounter) {
         counter.array = Var::make(util::uniqueName("counters"), Int(), true);
       }
       counter.count = Var::make(util::uniqueName("count"), Int());
       counter.initPoint = *(initPoint.first);
-      counter.indices = std::vector<IndexVar>(initPoint.second, expr->indexVars.end());
+      counter.indices = std::vector<IndexVar>(initPoint.second, indexVars.end());
       counters[expr->indexVars] = counter;
     }
 
