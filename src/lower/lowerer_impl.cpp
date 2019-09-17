@@ -172,18 +172,25 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   vector<TensorVar> arguments = getArguments(stmt);
   vector<TensorVar> temporaries = getTemporaries(stmt);
 
-  // Convert tensor results, arguments and temporaries to IR variables
+  // Convert tensor results and arguments IR variables
   map<TensorVar, Expr> resultVars;
   vector<Expr> resultsIR = createVars(results, &resultVars);
   tensorVars.insert(resultVars.begin(), resultVars.end());
   vector<Expr> argumentsIR = createVars(arguments, &tensorVars);
-  vector<Expr> temporariesIR = createVars(temporaries, &tensorVars);
+
+  // Create variables for temporaries
+  // TODO Remove this
+  for (auto& temp : temporaries) {
+    ir::Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(),
+                                   true, true);
+    tensorVars.insert({temp, irVar});
+  }
 
   // Create variables for keeping track of result values array capacity
   createCapacityVars(resultVars, &capacityVars);
 
   // Create iterators
-  iterators = Iterators::make(stmt, tensorVars, &indexVars);
+  iterators = Iterators(stmt, tensorVars);
 
   vector<Access> inputAccesses, resultAccesses;
   set<Access> reducedAccesses;
@@ -195,8 +202,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   createReducedValueVars(inputAccesses, &reducedValueVars);
 
   map<TensorVar, Expr> scalars;
-  vector<Stmt> headerStmts;
-  vector<Stmt> footerStmts;
 
   // Define and initialize dimension variables
   vector<IndexVar> indexVars = getIndexVars(stmt);
@@ -285,7 +290,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         taco_iassert(!util::contains(scalars, result));
         taco_iassert(util::contains(tensorVars, result));
         scalars.insert({result, tensorVars.at(result)});
-        headerStmts.push_back(defineScalarVariable(result, true));
+        header.push_back(defineScalarVariable(result, true));
       }
     }
     for (auto& argument : arguments) {
@@ -293,7 +298,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         taco_iassert(!util::contains(scalars, argument));
         taco_iassert(util::contains(tensorVars, argument));
         scalars.insert({argument, tensorVars.at(argument)});
-        headerStmts.push_back(defineScalarVariable(argument, false));
+        header.push_back(defineScalarVariable(argument, false));
       }
     }
   }
@@ -304,7 +309,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       if (result.getOrder() == 0) {
         Expr resultIR = resultVars.at(result);
         Expr vals = GetProperty::make(resultIR, TensorProperty::Values);
-        headerStmts.push_back(Allocate::make(vals, 1));
+        header.push_back(Allocate::make(vals, 1));
       }
     }
   }
@@ -312,9 +317,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // Allocate and initialize append and insert mode indices
   Stmt initializeResults = initResultArrays(resultAccesses, inputAccesses, 
                                             reducedAccesses);
-
-  // Declare and initialize non-scalar temporaries
-  Stmt tempDefinitions = defineTemporaries(temporaries, scalars);
 
   // Allocate and free counter arrays
   std::vector<Stmt> allocCounterStmts;
@@ -346,27 +348,25 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Expr resultIR = scalars.at(result);
         Expr varValueIR = tensorVars.at(result);
         Expr valuesArrIR = GetProperty::make(resultIR, TensorProperty::Values);
-        footerStmts.push_back(Store::make(valuesArrIR, 0, varValueIR));
+        footer.push_back(Store::make(valuesArrIR, 0, varValueIR));
       }
     }
   }
 
   // Create function
-  Stmt header = headerStmts.empty() ? Stmt() : Block::make(headerStmts);
-  Stmt footer = footerStmts.empty() ? Stmt() : Block::make(footerStmts);
   return Function::make(name, resultsIR, argumentsIR,
-                        Block::blanks(header,
-                                      tempDefinitions,
+                        Block::blanks(Block::make(header),
                                       allocCounters,
                                       initializeResults,
                                       body,
                                       finalizeResults,
                                       freeCounters,
-                                      footer));
+                                      Block::make(footer)));
 }
 
 
-Stmt LowererImpl::lowerAssignment(Assignment assignment) {
+Stmt LowererImpl::lowerAssignment(Assignment assignment)
+{
   TensorVar result = assignment.getLhs().getTensorVar();
 
   if (generateComputeCode()) {
@@ -385,7 +385,7 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment) {
     }
     // Assignments to tensor variables (non-scalar).
     else {
-      Expr values = GetProperty::make(var, TensorProperty::Values);
+      Expr values = getValuesArray(result);
       Expr loc = generateValueLocExpr(assignment.getLhs());
 
       std::vector<Stmt> accessStmts;
@@ -532,7 +532,7 @@ Stmt LowererImpl::lowerForall(Forall forall)
     // Emit coordinate iteration loop
     else {
       taco_iassert(iterator.hasCoordIter());
-      taco_not_supported_yet;
+//      taco_not_supported_yet
       loops = Stmt();
     }
   }
@@ -541,7 +541,7 @@ Stmt LowererImpl::lowerForall(Forall forall)
     loops = lowerMergeLattice(lattice, getCoordinateVar(forall.getIndexVar()),
                               forall, reducedAccesses);
   }
-  taco_iassert(loops.defined());
+//  taco_iassert(loops.defined());
 
   if (!generateComputeCode() && !hasStores(loops)) {
     // If assembly loop does not modify output arrays, then it can be safely 
@@ -826,21 +826,39 @@ Stmt LowererImpl::lowerForallBody(Expr coordinate, Forall stmt,
                      incCounters);
 }
 
+
 Stmt LowererImpl::lowerWhere(Where where) {
-  // Declare and initialize the where statement's temporary
   TensorVar temporary = where.getTemporary();
-  Stmt declareTemporary;
+
+  // Declare and initialize the where statement's temporary
+  Stmt initializeTemporary;
   if (isScalar(temporary.getType())) {
-    declareTemporary = defineScalarVariable(temporary, true);
+    initializeTemporary = defineScalarVariable(temporary, true);
   }
   else {
-    taco_not_supported_yet;
+    if (generateComputeCode()) {
+      Expr values = ir::Var::make(temporary.getName(),
+                                  temporary.getType().getDataType(),
+                                  true, false);
+
+      Expr size = ir::Mul::make((uint64_t)3, Sizeof::make(values.type()));
+      Stmt allocate = VarDecl::make(values, Malloc::make(size));
+      this->header.push_back(allocate);
+
+      Stmt free = Free::make(values);
+      this->footer.push_back(free);
+
+      /// Make a struct object that lowerAssignment and lowerAccess can read
+      /// temporary value arrays from.
+      TemporaryArrays arrays;
+      arrays.values = values;
+      this->temporaryArrays.insert({temporary, arrays});
+    }
   }
-  taco_iassert(declareTemporary.defined());
 
   Stmt producer = lower(where.getProducer());
   Stmt consumer = lower(where.getConsumer());
-  return Block::make(declareTemporary, producer, consumer);
+  return Block::make(initializeTemporary, producer, consumer);
 }
 
 
@@ -860,15 +878,13 @@ Stmt LowererImpl::lowerMulti(Multi multi) {
 
 Expr LowererImpl::lowerAccess(Access access) {
   TensorVar var = access.getTensorVar();
-  Expr varIR = getTensorVar(var);
 
   if (isScalar(var.getType())) {
-    return varIR;
+    return getTensorVar(var);
   }
-  
+
   return getIterators(access).back().isUnique()
-         ? Load::make(GetProperty::make(varIR, TensorProperty::Values),
-                      generateValueLocExpr(access))
+         ? Load::make(getValuesArray(var), generateValueLocExpr(access))
          : getReducedValueVar(access);
 }
 
@@ -1049,6 +1065,14 @@ Expr LowererImpl::getCapacityVar(Expr tensor) const {
 }
 
 
+ir::Expr LowererImpl::getValuesArray(TensorVar var) const
+{
+  return (util::contains(temporaryArrays, var))
+         ? temporaryArrays.at(var).values
+         : GetProperty::make(getTensorVar(var), TensorProperty::Values);
+}
+
+
 Expr LowererImpl::getDimension(IndexVar indexVar) const {
   taco_iassert(util::contains(this->dimensions, indexVar)) << indexVar;
   return this->dimensions.at(indexVar);
@@ -1106,11 +1130,7 @@ Expr LowererImpl::getCoordinateVar(Iterator iterator) const {
   if (iterator.isDimensionIterator()) {
     return iterator.getCoordVar();
   }
-  taco_iassert(util::contains(this->indexVars, iterator))
-      << "Could not find a coordinate for " << iterator << " from "
-      << util::join(this->indexVars);
-  auto& indexVar = this->indexVars.at(iterator);
-  return this->getCoordinateVar(indexVar);
+  return this->getCoordinateVar(iterator.getIndexVar());
 }
 
 
@@ -1302,29 +1322,6 @@ ir::Stmt LowererImpl::finalizeResultArrays(std::vector<Access> writes) {
     }
   }
   return result.empty() ? Stmt() : Block::blanks(result);
-}
-
-
-Stmt LowererImpl::defineTemporaries(vector<TensorVar> temporaries,
-                                    map<TensorVar, Expr> scalars) {
-  vector<Stmt> result;
-  if (generateComputeCode()) {
-    for (auto& temporary : temporaries) {
-      if (isScalar(temporary.getType())) {
-        // We will define scalar temporaries locally where they are initialized
-        continue;
-      }
-
-      taco_not_supported_yet;
-      Expr temporaryPtr = Var::make(temporary.getName(),
-                                    temporary.getType().getDataType(),
-                                    true, true);
-
-      Stmt definition = VarDecl::make(temporaryPtr, 0);
-      result.push_back(definition);
-    }
-  }
-  return result.empty() ? Stmt() : Block::make(result);
 }
 
 Stmt LowererImpl::defineScalarVariable(TensorVar var, bool zero) {
