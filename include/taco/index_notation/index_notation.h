@@ -40,6 +40,7 @@ struct IndexVarDivNode;
 struct IndexVarCountNode;
 
 struct AccessNode;
+struct SlicedAccessNode;
 struct LiteralNode;
 struct NegNode;
 struct SqrtNode;
@@ -47,7 +48,12 @@ struct AddNode;
 struct SubNode;
 struct MulNode;
 struct DivNode;
+struct MaxNode;
+struct MinNode;
 struct CastNode;
+struct SelectNode;
+struct MapNode;
+struct NnzNode;
 struct CallIntrinsicNode;
 struct ReductionNode;
 
@@ -338,7 +344,7 @@ public:
   Access(const TensorVar& tensorVar, const std::vector<IndexVarExpr>& indices);
 
   /// Return the Access expression's TensorVar.
-  const TensorVar &getTensorVar() const;
+  const TensorVar& getTensorVar() const;
 
   /// Returns the index variable expressions used to index into the Access's TensorVar.
   const std::vector<IndexVarExpr>& getIndices() const;
@@ -366,6 +372,29 @@ public:
   Assignment operator+=(const IndexExpr&);
 
   typedef AccessNode Node;
+};
+
+
+/// An index expression that represents an access of a tensor slice, such as 
+/// `A(i,:))`.
+class SlicedAccess : public IndexExpr {
+public:
+  SlicedAccess() = default;
+  SlicedAccess(const SlicedAccessNode*);
+  SlicedAccess(const TensorVar& tensorVar, 
+               const std::vector<IndexVar>& indices,
+               const std::vector<bool>& slicedDims);
+
+  /// Return the SlicedAccess expression's TensorVar.
+  const TensorVar& getTensorVar() const;
+
+  /// Returns the index variables used to index into the SlicedAccess's TensorVar.
+  const std::vector<IndexVar>& getIndexVars() const;
+
+  /// Returns a vector indicating whether or not each dimension is sliced.
+  const std::vector<bool>& getSlicedDims() const;
+
+  typedef SlicedAccessNode Node;
 };
 
 
@@ -486,6 +515,40 @@ public:
 };
 
 
+/// An max expression computes the max of two numbers.
+/// ```
+/// a(i) = max(b(i), c(i));
+/// ```
+class Max : public IndexExpr {
+public:
+  Max();
+  Max(const MaxNode*);
+  Max(IndexExpr a, IndexExpr b);
+
+  IndexExpr getA() const;
+  IndexExpr getB() const;
+
+  typedef MaxNode Node;
+};
+
+
+/// An min expression computes the min of two numbers.
+/// ```
+/// a(i) = min(b(i), c(i));
+/// ```
+class Min : public IndexExpr {
+public:
+  Min();
+  Min(const MinNode*);
+  Min(IndexExpr a, IndexExpr b);
+
+  IndexExpr getA() const;
+  IndexExpr getB() const;
+
+  typedef MinNode Node;
+};
+
+
 /// A sqrt expression computes the square root of a number
 /// ```
 /// a(i) = sqrt(b(i));
@@ -516,6 +579,43 @@ public:
 
   typedef CastNode Node;
 };
+
+  
+/// A map expression maps a tensor access to a computed value
+/// ```
+/// a(i) = map(b(i), 1)
+/// ```
+class Map : public IndexExpr {
+public:
+  Map() = default;
+  Map(const MapNode*);
+  Map(Access in, IndexExpr out);
+  Map(SlicedAccess in, IndexExpr out);
+
+  IndexExpr getIn() const;
+  IndexExpr getOut() const;
+
+  typedef MapNode Node;
+};
+
+  
+///// A select expression returns one of two values depending on whether a 
+///// condition is true or false
+///// ```
+///// a(i) = select(b(i) > 0, c(i), d(i))
+///// ```
+//class Select : public IndexExpr {
+//public:
+//  Select() = default;
+//  Select(const SelectNode*);
+//  Select(IndexExpr cond, IndexExpr a, IndexExpr b);
+//
+//  IndexExpr getCond() const;
+//  IndexExpr getA() const;
+//  IndexExpr getB() const;
+//
+//  typedef SelectNode Node;
+//};
 
   
 /// A call to an intrinsic.

@@ -107,6 +107,10 @@ ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
       ir::Expr loadValue = Load::make(values, pos);
       expr = loadValue;
     }
+    
+    void visit(const SlicedAccessNode* op) {
+      taco_unreachable;
+    }
 
     void visit(const LiteralNode* op) {
       switch (op->getDataType().getKind()) {
@@ -184,8 +188,20 @@ ir::Expr lowerToScalarExpression(const IndexExpr& indexExpr,
       expr = ir::Div::make(lower(op->a), lower(op->b));
     }
 
+    void visit(const MaxNode* op) {
+      taco_not_supported_yet;
+    }
+
+    void visit(const MinNode* op) {
+      taco_not_supported_yet;
+    }
+
     void visit(const CastNode* op) {
       taco_not_supported_yet;
+    }
+
+    void visit(const MapNode* op) {
+      expr = lower(op->out);
     }
 
     void visit(const CallIntrinsicNode* op) {

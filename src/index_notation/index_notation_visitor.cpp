@@ -70,6 +70,9 @@ IndexNotationVisitor::~IndexNotationVisitor() {
 void IndexNotationVisitor::visit(const AccessNode* op) {
 }
 
+void IndexNotationVisitor::visit(const SlicedAccessNode* op) {
+}
+
 void IndexNotationVisitor::visit(const LiteralNode* op) {
 }
 
@@ -97,8 +100,21 @@ void IndexNotationVisitor::visit(const DivNode* op) {
   visit(static_cast<const BinaryExprNode*>(op));
 }
 
+void IndexNotationVisitor::visit(const MaxNode* op) {
+  visit(static_cast<const BinaryExprNode*>(op));
+}
+
+void IndexNotationVisitor::visit(const MinNode* op) {
+  visit(static_cast<const BinaryExprNode*>(op));
+}
+
 void IndexNotationVisitor::visit(const CastNode* op) {
   op->a.accept(this);
+}
+
+void IndexNotationVisitor::visit(const MapNode* op) {
+  op->in.accept(this);
+  op->out.accept(this);
 }
 
 void IndexNotationVisitor::visit(const CallIntrinsicNode* op) {

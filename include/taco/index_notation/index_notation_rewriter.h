@@ -62,6 +62,7 @@ protected:
   using IndexExprVisitorStrict::visit;
 
   virtual void visit(const AccessNode* op) = 0;
+  virtual void visit(const SlicedAccessNode*) = 0;
   virtual void visit(const LiteralNode* op) = 0;
   virtual void visit(const NegNode* op) = 0;
   virtual void visit(const SqrtNode* op) = 0;
@@ -69,7 +70,10 @@ protected:
   virtual void visit(const SubNode* op) = 0;
   virtual void visit(const MulNode* op) = 0;
   virtual void visit(const DivNode* op) = 0;
+  virtual void visit(const MaxNode*) = 0;
+  virtual void visit(const MinNode*) = 0;
   virtual void visit(const CastNode* op) = 0;
+  virtual void visit(const MapNode*) = 0;
   virtual void visit(const CallIntrinsicNode* op) = 0;
   virtual void visit(const ReductionNode* op) = 0;
 };
@@ -122,6 +126,7 @@ protected:
   using IndexNotationRewriterStrict::visit;
 
   virtual void visit(const AccessNode* op);
+  virtual void visit(const SlicedAccessNode* node);
   virtual void visit(const LiteralNode* op);
   virtual void visit(const NegNode* op);
   virtual void visit(const SqrtNode* op);
@@ -129,7 +134,10 @@ protected:
   virtual void visit(const SubNode* op);
   virtual void visit(const MulNode* op);
   virtual void visit(const DivNode* op);
+  virtual void visit(const MaxNode* node);
+  virtual void visit(const MinNode* node);
   virtual void visit(const CastNode* op);
+  virtual void visit(const MapNode* node);
   virtual void visit(const CallIntrinsicNode* op);
   virtual void visit(const ReductionNode* op);
 

@@ -20,14 +20,20 @@ struct IndexVarCountNode;
 struct BinaryIndexVarExprNode;
 
 struct AccessNode;
+struct SlicedAccessNode;
 struct LiteralNode;
 struct NegNode;
 struct AddNode;
 struct SubNode;
 struct MulNode;
 struct DivNode;
+struct MaxNode;
+struct MinNode;
 struct SqrtNode;
 struct CastNode;
+struct SelectNode;
+struct MapNode;
+struct NnzNode;
 struct CallIntrinsicNode;
 struct UnaryExprNode;
 struct BinaryExprNode;
@@ -78,14 +84,18 @@ public:
   void visit(const IndexExpr&);
 
   virtual void visit(const AccessNode*) = 0;
+  virtual void visit(const SlicedAccessNode*) = 0;
   virtual void visit(const LiteralNode*) = 0;
   virtual void visit(const NegNode*) = 0;
   virtual void visit(const AddNode*) = 0;
   virtual void visit(const SubNode*) = 0;
   virtual void visit(const MulNode*) = 0;
   virtual void visit(const DivNode*) = 0;
+  virtual void visit(const MaxNode*) = 0;
+  virtual void visit(const MinNode*) = 0;
   virtual void visit(const SqrtNode*) = 0;
   virtual void visit(const CastNode*) = 0;
+  virtual void visit(const MapNode*) = 0;
   virtual void visit(const CallIntrinsicNode*) = 0;
   virtual void visit(const ReductionNode*) = 0;
 };
@@ -123,14 +133,18 @@ public:
 
   // Index Expressions
   virtual void visit(const AccessNode* node);
+  virtual void visit(const SlicedAccessNode* node);
   virtual void visit(const LiteralNode* node);
   virtual void visit(const NegNode* node);
   virtual void visit(const AddNode* node);
   virtual void visit(const SubNode* node);
   virtual void visit(const MulNode* node);
   virtual void visit(const DivNode* node);
+  virtual void visit(const MaxNode* node);
+  virtual void visit(const MinNode* node);
   virtual void visit(const SqrtNode* node);
   virtual void visit(const CastNode* node);
+  virtual void visit(const MapNode* node);
   virtual void visit(const CallIntrinsicNode* node);
   virtual void visit(const UnaryExprNode* node);
   virtual void visit(const BinaryExprNode* node);
@@ -190,6 +204,7 @@ private:
 
   using IndexNotationVisitor::visit;
   RULE(AccessNode)
+  RULE(SlicedAccessNode)
   RULE(LiteralNode)
   RULE(NegNode)
   RULE(SqrtNode)
@@ -197,7 +212,10 @@ private:
   RULE(SubNode)
   RULE(MulNode)
   RULE(DivNode)
+  RULE(MaxNode)
+  RULE(MinNode)
   RULE(CastNode)
+  RULE(MapNode)
   RULE(CallIntrinsicNode)
   RULE(ReductionNode)
 

@@ -201,6 +201,10 @@ private:
     subExpr = IndexExpr();
   }
 
+  void visit(const SlicedAccessNode* node) {
+    taco_not_supported_yet;
+  }
+
   void visit(const LiteralNode* op) {
     subExpr = IndexExpr();
   }
@@ -252,7 +256,19 @@ private:
     subExpr = binarySubExpr(op);
   }
 
+  void visit(const MaxNode* expr) {
+    taco_not_supported_yet;
+  }
+
+  void visit(const MinNode* expr) {
+    taco_not_supported_yet;
+  }
+
   void visit(const CastNode* op) {
+    taco_not_supported_yet;
+  }
+
+  void visit(const MapNode* expr) {
     taco_not_supported_yet;
   }
 

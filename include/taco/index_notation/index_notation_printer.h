@@ -51,6 +51,7 @@ public:
 
   // Scalar Expressions
   void visit(const AccessNode*);
+  void visit(const SlicedAccessNode* node);
   void visit(const LiteralNode*);
   void visit(const NegNode*);
   void visit(const SqrtNode*);
@@ -58,7 +59,10 @@ public:
   void visit(const SubNode*);
   void visit(const MulNode*);
   void visit(const DivNode*);
+  void visit(const MaxNode*);
+  void visit(const MinNode*);
   void visit(const CastNode*);
+  void visit(const MapNode*);
   void visit(const CallIntrinsicNode*);
   void visit(const ReductionNode*);
 

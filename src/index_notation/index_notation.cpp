@@ -376,6 +376,21 @@ struct Equals : public IndexNotationVisitorStrict {
     }
     eq = true;
   }
+  
+  void visit(const SlicedAccessNode* anode) {
+    if (!isa<SlicedAccessNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<SlicedAccessNode>(bExpr.ptr);
+    if (anode->tensorVar != bnode->tensorVar ||
+        anode->indices != bnode->indices || 
+        anode->slicedDims != bnode->slicedDims) {
+      eq = false;
+      return;
+    }
+    eq = true;
+  }
 
   void visit(const LiteralNode* anode) {
     if (!isa<LiteralNode>(bExpr.ptr)) {
@@ -442,6 +457,14 @@ struct Equals : public IndexNotationVisitorStrict {
     eq = binaryEquals(anode, bExpr);
   }
 
+  void visit(const MaxNode* anode) {
+    eq = binaryEquals(anode, bExpr);
+  }
+
+  void visit(const MinNode* anode) {
+    eq = binaryEquals(anode, bExpr);
+  }
+
   void visit(const CastNode* anode) {
     if (!isa<CastNode>(bExpr.ptr)) {
       eq = false;
@@ -450,6 +473,19 @@ struct Equals : public IndexNotationVisitorStrict {
     auto bnode = to<CastNode>(bExpr.ptr);
     if (anode->getDataType() != bnode->getDataType() ||
         !equals(anode->a, bnode->a)) {
+      eq = false;
+      return;
+    }
+    eq = true;
+  }
+
+  void visit(const MapNode* anode) {
+    if (!isa<MapNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<MapNode>(bExpr.ptr);
+    if (!equals(anode->in, bnode->in) || !equals(anode->out, bnode->out)) {
       eq = false;
       return;
     }
@@ -680,6 +716,38 @@ template <> bool isa<Access>(IndexExpr e) {
 template <> Access to<Access>(IndexExpr e) {
   taco_iassert(isa<Access>(e));
   return Access(to<AccessNode>(e.ptr));
+}
+
+
+// class SlicedAccess
+SlicedAccess::SlicedAccess(const SlicedAccessNode* n) : IndexExpr(n) {
+}
+
+SlicedAccess::SlicedAccess(const TensorVar& tensor, 
+                           const std::vector<IndexVar>& indices,
+                           const std::vector<bool>& slicedDims)
+    : SlicedAccess(new SlicedAccessNode(tensor, indices, slicedDims)) {
+}
+
+const TensorVar& SlicedAccess::getTensorVar() const {
+  return getNode(*this)->tensorVar;
+}
+
+const std::vector<IndexVar>& SlicedAccess::getIndexVars() const {
+  return getNode(*this)->indices;
+}
+
+const std::vector<bool>& SlicedAccess::getSlicedDims() const {
+  return getNode(*this)->slicedDims;
+}
+
+template <> bool isa<SlicedAccess>(IndexExpr e) {
+  return isa<SlicedAccessNode>(e.ptr);
+}
+
+template <> SlicedAccess to<SlicedAccess>(IndexExpr e) {
+  taco_iassert(isa<SlicedAccess>(e));
+  return SlicedAccess(to<SlicedAccessNode>(e.ptr));
 }
 
 
@@ -919,6 +987,62 @@ template <> Div to<Div>(IndexExpr e) {
 }
 
 
+// class Max
+Max::Max() : Max(new MaxNode) {
+}
+
+Max::Max(const MaxNode* n) : IndexExpr(n) {
+}
+
+Max::Max(IndexExpr a, IndexExpr b) : Max(new MaxNode(a, b)) {
+}
+
+IndexExpr Max::getA() const {
+  return getNode(*this)->a;
+}
+
+IndexExpr Max::getB() const {
+  return getNode(*this)->b;
+}
+
+template <> bool isa<Max>(IndexExpr e) {
+  return isa<MaxNode>(e.ptr);
+}
+
+template <> Max to<Max>(IndexExpr e) {
+  taco_iassert(isa<Max>(e));
+  return Max(to<MaxNode>(e.ptr));
+}
+
+
+// class Min
+Min::Min() : Min(new MinNode) {
+}
+
+Min::Min(const MinNode* n) : IndexExpr(n) {
+}
+
+Min::Min(IndexExpr a, IndexExpr b) : Min(new MinNode(a, b)) {
+}
+
+IndexExpr Min::getA() const {
+  return getNode(*this)->a;
+}
+
+IndexExpr Min::getB() const {
+  return getNode(*this)->b;
+}
+
+template <> bool isa<Min>(IndexExpr e) {
+  return isa<MinNode>(e.ptr);
+}
+
+template <> Min to<Min>(IndexExpr e) {
+  taco_iassert(isa<Min>(e));
+  return Min(to<MinNode>(e.ptr));
+}
+
+
 // class Sqrt
 Sqrt::Sqrt(const SqrtNode* n) : IndexExpr(n) {
 }
@@ -958,6 +1082,34 @@ template <> bool isa<Cast>(IndexExpr e) {
 template <> Cast to<Cast>(IndexExpr e) {
   taco_iassert(isa<Cast>(e));
   return Cast(to<CastNode>(e.ptr));
+}
+
+
+// class Map
+Map::Map(const MapNode* n) : IndexExpr(n) {
+}
+
+Map::Map(Access in, IndexExpr out) : Map(new MapNode(in, out)) {
+}
+
+Map::Map(SlicedAccess in, IndexExpr out) : Map(new MapNode(in, out)) {
+}
+
+IndexExpr Map::getIn() const {
+  return getNode(*this)->in;
+}
+
+IndexExpr Map::getOut() const {
+  return getNode(*this)->out;
+}
+
+template <> bool isa<Map>(IndexExpr e) {
+  return isa<MapNode>(e.ptr);
+}
+
+template <> Map to<Map>(IndexExpr e) {
+  taco_iassert(isa<Map>(e));
+  return Map(to<MapNode>(e.ptr));
 }
 
 
@@ -2177,6 +2329,10 @@ private:
     }
   }
 
+  void visit(const SlicedAccessNode* op) {
+    taco_not_supported_yet;
+  }
+
   void visit(const LiteralNode* op) {
     expr = op;
   }
@@ -2271,6 +2427,14 @@ private:
     expr = visitConjunctionOp(op);
   }
 
+  void visit(const MaxNode* op) {
+    taco_not_supported_yet;
+  }
+
+  void visit(const MinNode* op) {
+    taco_not_supported_yet;
+  }
+
   void visit(const CastNode* op) {
     IndexExpr a = rewrite(op->a);
     if (!a.defined()) {
@@ -2282,6 +2446,10 @@ private:
     else {
       expr = new CastNode(a, op->getDataType());
     }
+  }
+
+  void visit(const MapNode* op) {
+    taco_not_supported_yet;
   }
 
   void visit(const CallIntrinsicNode* op) {

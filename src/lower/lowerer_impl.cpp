@@ -54,9 +54,15 @@ private:
   void visit(const SubNode* node)           { expr = impl->lowerSub(node); }
   void visit(const MulNode* node)           { expr = impl->lowerMul(node); }
   void visit(const DivNode* node)           { expr = impl->lowerDiv(node); }
+  void visit(const MaxNode* node)           { expr = impl->lowerMax(node); }
+  void visit(const MinNode* node)           { expr = impl->lowerMin(node); }
   void visit(const SqrtNode* node)          { expr = impl->lowerSqrt(node); }
   void visit(const CastNode* node)          { expr = impl->lowerCast(node); }
+  void visit(const MapNode* node)           { expr = impl->lowerMap(node); }
   void visit(const CallIntrinsicNode* node) { expr = impl->lowerCallIntrinsic(node); }
+  void visit(const SlicedAccessNode* node) { 
+    taco_ierror << "Sliced access nodes should not need to be explicitly lowered";
+  }
   void visit(const ReductionNode* node)  {
     taco_ierror << "Reduction nodes not supported in concrete index notation";
   }
@@ -714,7 +720,7 @@ Stmt LowererImpl::lowerMergePoint(MergeLattice pointLattice,
   else {
     // Multiple position iterators so the smallest is the resolved coordinate
     resolveCoordinate = VarDecl::make(coordinate,
-                                      Min::make(coordinates(mergers)));
+                                      ir::Min::make(coordinates(mergers)));
   }
 
   // Locate positions
@@ -940,6 +946,16 @@ Expr LowererImpl::lowerDiv(Div div) {
 }
 
 
+Expr LowererImpl::lowerMax(Max max) {
+  return ir::Max::make(lower(max.getA()), lower(max.getB()));
+}
+
+
+Expr LowererImpl::lowerMin(Min min) {
+  return ir::Min::make({lower(min.getA()), lower(min.getB())});
+}
+
+
 Expr LowererImpl::lowerSqrt(Sqrt sqrt) {
   return ir::Sqrt::make(lower(sqrt.getA()));
 }
@@ -947,6 +963,11 @@ Expr LowererImpl::lowerSqrt(Sqrt sqrt) {
 
 Expr LowererImpl::lowerCast(Cast cast) {
   return ir::Cast::make(lower(cast.getA()), cast.getDataType());
+}
+
+
+Expr LowererImpl::lowerMap(Map map) {
+  return lower(map.getOut());
 }
 
 

@@ -90,6 +90,10 @@ void IndexNotationRewriter::visit(const AccessNode* op) {
   expr = op;
 }
 
+void IndexNotationRewriter::visit(const SlicedAccessNode* op) {
+  expr = op;
+}
+
 template <class T>
 IndexExpr visitUnaryOp(const T *op, IndexNotationRewriter *rw) {
   IndexExpr a = rw->rewrite(op->a);
@@ -141,6 +145,14 @@ void IndexNotationRewriter::visit(const DivNode* op) {
   expr = visitBinaryOp(op, this);
 }
 
+void IndexNotationRewriter::visit(const MaxNode* op) {
+  expr = visitBinaryOp(op, this);
+}
+
+void IndexNotationRewriter::visit(const MinNode* op) {
+  expr = visitBinaryOp(op, this);
+}
+
 void IndexNotationRewriter::visit(const CastNode* op) {
   IndexExpr a = rewrite(op->a);
   if (a == op->a) {
@@ -148,6 +160,17 @@ void IndexNotationRewriter::visit(const CastNode* op) {
   }
   else {
     expr = new CastNode(a, op->getDataType());
+  }
+}
+
+void IndexNotationRewriter::visit(const MapNode* op) {
+  IndexExpr in = rewrite(op->in);
+  IndexExpr out = rewrite(op->out);
+  if (in == op->in && out == op->out) {
+    expr = op;
+  }
+  else {
+    expr = new MapNode(in, out);
   }
 }
 
@@ -283,6 +306,10 @@ struct ReplaceRewriter : public IndexNotationRewriter {
     SUBSTITUTE_EXPR;
   }
 
+  void visit(const SlicedAccessNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
   void visit(const LiteralNode* op) {
     SUBSTITUTE_EXPR;
   }
@@ -308,6 +335,26 @@ struct ReplaceRewriter : public IndexNotationRewriter {
   }
 
   void visit(const DivNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
+  void visit(const MaxNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
+  void visit(const MinNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
+  void visit(const CastNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
+  void visit(const MapNode* op) {
+    SUBSTITUTE_EXPR;
+  }
+
+  void visit(const CallIntrinsicNode* op) {
     SUBSTITUTE_EXPR;
   }
 
@@ -382,6 +429,26 @@ struct ReplaceIndexVars : public IndexNotationRewriter {
     }
   }
 
+  void visit(const SlicedAccessNode* op) {
+    vector<IndexVar> indices;
+    bool modified = false;
+    for (auto& index : op->indices) {
+      if (util::contains(indexVarExprRewriter.substitutions, index)) {
+        indices.push_back(indexVarExprRewriter.substitutions.at(index));
+        modified = true;
+      }
+      else {
+        indices.push_back(index);
+      }
+    }
+    if (modified) {
+      expr = SlicedAccess(op->tensorVar, indices, op->slicedDims);
+    }
+    else {
+      expr = op;
+    }
+  }
+
   // TODO: Replace in assignments
 };
 
@@ -396,6 +463,13 @@ struct ReplaceTensorVars : public IndexNotationRewriter {
     TensorVar var = op->tensorVar;
     expr = (util::contains(substitutions, var))
            ? Access(substitutions.at(var), op->indices)
+           : op;
+  }
+
+  void visit(const SlicedAccessNode* op) {
+    TensorVar var = op->tensorVar;
+    expr = (util::contains(substitutions, var))
+           ? SlicedAccess(substitutions.at(var), op->indices, op->slicedDims)
            : op;
   }
 

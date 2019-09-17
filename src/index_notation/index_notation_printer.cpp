@@ -69,6 +69,24 @@ void IndexNotationPrinter::visit(const AccessNode* op) {
   }
 }
 
+void IndexNotationPrinter::visit(const SlicedAccessNode* op) {
+  os << op->tensorVar.getName();
+  if (op->indices.size() > 0) {
+    os << "(";
+    std::string sep = "";
+    for (size_t i = 0; i < op->indices.size(); ++i) {
+      os << sep;
+      if (op->slicedDims[i]) {
+        os << ":";
+      } else {
+        os << op->indices[i];
+      }
+      sep = ", ";
+    }
+    os << ")";
+  }
+}
+
 void IndexNotationPrinter::visit(const LiteralNode* op) {
   switch (op->getDataType().getKind()) {
     case Datatype::Bool:
@@ -175,12 +193,39 @@ void IndexNotationPrinter::visit(const DivNode* op) {
   visitBinary(op, Precedence::DIV);
 }
 
+void IndexNotationPrinter::visit(const MaxNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << "max(";
+  op->a.accept(this);
+  os << ", ";
+  op->b.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const MinNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << "min(";
+  op->a.accept(this);
+  os << ", ";
+  op->b.accept(this);
+  os << ")";
+}
+
 void IndexNotationPrinter::visit(const CastNode* op) {
   parentPrecedence = Precedence::CAST;
   os << "cast<";
   os << op->getDataType();
   os << ">(";
   op->a.accept(this);
+  os << ")";
+}
+
+void IndexNotationPrinter::visit(const MapNode* op) {
+  parentPrecedence = Precedence::FUNC;
+  os << "map(";
+  op->in.accept(this);
+  os << ", ";
+  op->out.accept(this);
   os << ")";
 }
 

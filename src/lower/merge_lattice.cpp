@@ -81,6 +81,37 @@ private:
     lattice = MergeLattice({point});
   }
 
+  void visit(const SlicedAccessNode* access)
+  {
+    // If the accessed tensor variable is a temporary with an associated merge
+    // lattice then we return that lattice.
+    if (util::contains(latticesOfTemporaries, access->tensorVar)) {
+      lattice = latticesOfTemporaries.at(access->tensorVar);
+      return;
+    }
+
+    if (!util::contains(access->indices,i)) {
+      // The access expression does not index i so we construct a lattice from
+      // the mode iterator.  This is sufficient to support broadcast semantics!
+      lattice = modeIterationLattice();
+      return;
+    }
+
+    Iterator iterator = getIterator(access);
+    taco_iassert(iterator.hasCoordIter() || iterator.hasPosIter() ||
+                 iterator.hasLocate())
+        << "Iterator must support at least one capability";
+
+
+    // If iterator does not support coordinate or position iteration then
+    // iterate over the dimension and locate from it
+    MergePoint point = (!iterator.hasCoordIter() && !iterator.hasPosIter())
+                       ? MergePoint({iterators.modeIterator(i)}, {iterator}, {})
+                       : MergePoint({iterator}, {}, {});
+
+    lattice = MergeLattice({point});
+  }
+
   void visit(const LiteralNode* node) {
     // TODO: if constant is zero, then lattice should iterate over no coordinate
     //       (rather than all coordinates)
@@ -151,12 +182,24 @@ private:
     }
   }
 
+  void visit(const MaxNode* expr) {
+    taco_not_supported_yet;
+  }
+
+  void visit(const MinNode* expr) {
+    taco_not_supported_yet;
+  }
+
   void visit(const SqrtNode* expr) {
     lattice = build(expr->a);
   }
 
   void visit(const CastNode* expr) {
     lattice = build(expr->a);
+  }
+
+  void visit(const MapNode* expr) {
+    lattice = build(expr->in);
   }
 
   void visit(const CallIntrinsicNode* expr) {
@@ -246,6 +289,12 @@ private:
     taco_iassert(util::contains(access.getIndexVars(), i));
     int loc = (int)util::locate(access.getIndexVars(), i) + 1;
     return iterators.levelIterator(ModeAccess(access, loc));
+  }
+
+  Iterator getIterator(SlicedAccess access) {
+    taco_iassert(util::contains(access.getIndexVars(), i));
+    int loc = (int)util::locate(access.getIndexVars(), i) + 1;
+    return iterators.levelIterator(ModeAccess(Access(access.getTensorVar(), access.getIndexVars()), loc));
   }
 
   /**

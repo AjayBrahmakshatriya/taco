@@ -186,11 +186,20 @@ protected:
   /// Lower a division expression.
   virtual ir::Expr lowerDiv(Div div);
 
+  /// Lower a max expression.
+  virtual ir::Expr lowerMax(Max max);
+
+  /// Lower a min expression.
+  virtual ir::Expr lowerMin(Min min);
+
   /// Lower a square root expression.
   virtual ir::Expr lowerSqrt(Sqrt sqrt);
 
   /// Lower a cast expression.
   virtual ir::Expr lowerCast(Cast cast);
+
+  /// Lower a map expression.
+  virtual ir::Expr lowerMap(Map map);
 
   /// Lower an intrinsic function call expression.
   virtual ir::Expr lowerCallIntrinsic(CallIntrinsic call);

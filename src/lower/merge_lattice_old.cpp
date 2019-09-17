@@ -97,6 +97,10 @@ MergeLattice MergeLattice::make(Forall forall,
       lattice = MergeLattice({latticePoint}, {});
     }
 
+    void visit(const SlicedAccessNode* node) {
+      taco_not_supported_yet;
+    }
+
     void visit(const LiteralNode* node) {
       taco_not_supported_yet;
     }
@@ -165,12 +169,24 @@ MergeLattice MergeLattice::make(Forall forall,
       }
     }
 
+    void visit(const MaxNode* expr) {
+      taco_not_supported_yet;
+    }
+
+    void visit(const MinNode* expr) {
+      taco_not_supported_yet;
+    }
+
     void visit(const SqrtNode* expr) {
       lattice = makeLattice(expr->a);
     }
 
     void visit(const CastNode* expr) {
       lattice = makeLattice(expr->a);
+    }
+
+    void visit(const MapNode* expr) {
+      taco_not_supported_yet;
     }
 
     void visit(const CallIntrinsicNode* expr) {
@@ -255,6 +271,10 @@ MergeLattice MergeLattice::make(const IndexExpr& indexExpr,
       lattice = MergeLattice({latticePoint}, {});
     }
 
+    void visit(const SlicedAccessNode* node) {
+      taco_not_supported_yet;
+    }
+
     void visit(const LiteralNode*) {
     }
 
@@ -328,8 +348,20 @@ MergeLattice MergeLattice::make(const IndexExpr& indexExpr,
       }
     }
 
+    void visit(const MaxNode* expr) {
+      taco_not_supported_yet;
+    }
+
+    void visit(const MinNode* expr) {
+      taco_not_supported_yet;
+    }
+
     void visit(const CastNode* expr) {
       lattice = buildLattice(expr->a);
+    }
+
+    void visit(const MapNode* expr) {
+      taco_not_supported_yet;
     }
 
     void visit(const CallIntrinsicNode* expr) {

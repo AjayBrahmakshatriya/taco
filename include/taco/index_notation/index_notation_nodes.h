@@ -105,6 +105,23 @@ struct AccessNode : public IndexExprNode {
   std::vector<IndexVarExpr> indices;
 };
 
+struct SlicedAccessNode : public IndexExprNode {
+  SlicedAccessNode(TensorVar tensorVar, const std::vector<IndexVar>& indices,
+                   const std::vector<bool>& slicedDims)
+      : IndexExprNode(tensorVar.getType().getDataType()), 
+        tensorVar(tensorVar), indices(indices), slicedDims(slicedDims) {
+    taco_iassert(indices.size() == slicedDims.size());
+  }
+
+  void accept(IndexExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  TensorVar tensorVar;
+  std::vector<IndexVar> indices;
+  std::vector<bool> slicedDims;
+};
+
 struct LiteralNode : public IndexExprNode {
   template <typename T> LiteralNode(T val) : IndexExprNode(type<T>()) {
     this->val = malloc(sizeof(T));
@@ -215,6 +232,34 @@ struct DivNode : public BinaryExprNode {
 };
 
 
+struct MaxNode : public BinaryExprNode {
+  MaxNode() : BinaryExprNode() {}
+  MaxNode(IndexExpr a, IndexExpr b) : BinaryExprNode(a, b) {}
+
+  std::string getOperatorString() const {
+    return "max";
+  }
+
+  void accept(IndexExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+};
+
+
+struct MinNode : public BinaryExprNode {
+  MinNode() : BinaryExprNode() {}
+  MinNode(IndexExpr a, IndexExpr b) : BinaryExprNode(a, b) {}
+
+  std::string getOperatorString() const {
+    return "min";
+  }
+
+  void accept(IndexExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+};
+
+
 struct SqrtNode : public UnaryExprNode {
   SqrtNode(IndexExpr operand) : UnaryExprNode(operand) {}
 
@@ -233,6 +278,18 @@ struct CastNode : public IndexExprNode {
   }
 
   IndexExpr a;
+};
+
+
+struct MapNode : public IndexExprNode {
+  MapNode(IndexExpr in, IndexExpr out) : in(in), out(out) {}
+
+  void accept(IndexExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  IndexExpr in;
+  IndexExpr out;
 };
 
 
