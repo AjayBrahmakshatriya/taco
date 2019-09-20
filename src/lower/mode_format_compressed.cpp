@@ -4,6 +4,11 @@
 #include "taco/ir/simplify.h"
 #include "taco/util/strings.h"
 
+#include "builder/builder_context.h"
+#include "builder/builder.h"
+#include "builder/static_var.h"
+#include "blocks/c_code_generator.h"
+
 using namespace std;
 using namespace taco::ir;
 
@@ -54,11 +59,87 @@ ModeFormat CompressedModeFormat::copy(
   return ModeFormat(compressedVariant);
 }
 
+class IREmitter : public block::block_visitor {
+public:
+  Expr expr;
+  Stmt stmt;
+  std::map<std::string, Expr> exprMap;
+
+  void visit(block::stmt_block::Ptr s) {
+    std::vector<Stmt> stmts;
+    for (const auto ss : s->stmts) {
+      ss->accept(this);
+      stmts.push_back(stmt);
+    }
+    stmt = Block::make(stmts);
+  }
+
+  void visit(block::assign_expr::Ptr e) {
+    e->var1->accept(this);
+    Expr lhs = expr;
+    e->expr1->accept(this);
+    Expr rhs = expr;
+    stmt = Assign::make(lhs, rhs);
+  }
+
+  void visit(block::var_expr::Ptr e) {
+    expr = exprMap[e->var1->var_name];
+  }
+
+  void visit(block::sq_bkt_expr::Ptr e) {
+    e->var_expr->accept(this);
+    Expr arr = expr;
+    e->index->accept(this);
+    Expr index = expr;
+    expr = Load::make(arr, index);
+  }
+
+  void visit(block::plus_expr::Ptr e) {
+    e->expr1->accept(this);
+    Expr lhs = expr;
+    e->expr2->accept(this);
+    Expr rhs = expr;
+    expr = ir::Add::make(lhs, rhs);
+  }
+
+  void visit(block::int_const::Ptr e) {
+    expr = ir::Literal::make((int)e->value);
+  }
+};
+
 ModeFunction CompressedModeFormat::posIterBounds(Expr parentPos, 
                                                  Mode mode) const {
   Expr pbegin = Load::make(getPosArray(mode.getModePack()), parentPos);
   Expr pend = Load::make(getPosArray(mode.getModePack()),
                          Add::make(parentPos, 1));
+  
+  builder::builder_context ctx;
+  builder::dyn_var<int>& posArray = *ctx.assume_variable<builder::dyn_var<int>>("posArray");
+  builder::dyn_var<int>& parentpos = *ctx.assume_variable<builder::dyn_var<int>>("parentPos");
+  builder::dyn_var<int>& pBegin = *ctx.assume_variable<builder::dyn_var<int>>("pBegin");
+  builder::dyn_var<int>& pEnd = *ctx.assume_variable<builder::dyn_var<int>>("pEnd");
+  std::map<std::string, Expr> exprMap;
+  exprMap["posArray"] = getPosArray(mode.getModePack());
+  exprMap["parentPos"] = parentPos;
+  exprMap["pBegin"] = ir::Var::make("pBegin", Int());
+  exprMap["pEnd"] = ir::Var::make("pEnd", Int());
+  auto ast = ctx.extract_ast_from_lambda([&](void) {
+    pBegin = posArray[parentpos];
+    pEnd = posArray[parentpos+1];
+    if (isa<Literal>(parentPos)) {
+      pEnd = posArray[1];
+    } else {
+      pEnd = posArray[parentpos+1];
+    }
+  });
+  ast->dump(std::cout, 0);
+  block::c_code_generator::generate_code(ast, std::cout, 0);
+
+  IREmitter emitter;
+  emitter.exprMap = exprMap;
+  ast->accept(&emitter);
+  std::cout << emitter.stmt << std::endl;
+
   return ModeFunction(Stmt(), {pbegin, pend});
 }
 

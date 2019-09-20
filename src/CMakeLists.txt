@@ -31,3 +31,5 @@ if (LINUX)
 else()
   target_link_libraries(taco PRIVATE ${TACO_LIBRARIES})
 endif()
+target_link_libraries(taco PRIVATE buildit)
+

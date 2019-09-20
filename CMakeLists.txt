@@ -79,8 +79,14 @@ set(TACO_SRC_DIR     ${TACO_PROJECT_DIR}/src)
 set(TACO_TEST_DIR    ${TACO_PROJECT_DIR}/test)
 set(TACO_TOOLS_DIR   ${TACO_PROJECT_DIR}/tools)
 set(TACO_INCLUDE_DIR ${TACO_PROJECT_DIR}/include)
+set(BUILDIT_INCLUDE_DIR ${TACO_PROJECT_DIR}/buildit/include)
+set(BUILDIT_BUILD_DIR ${TACO_PROJECT_DIR}/buildit/build)
 
 include_directories(${TACO_INCLUDE_DIR})
+include_directories(${BUILDIT_INCLUDE_DIR})
+link_directories(${BUILDIT_BUILD_DIR})
+
+set(CMAKE_EXE_LINKER_FLAGS "-rdynamic")
 
 set(TACO_LIBRARY_DIR ${CMAKE_LIBRARY_OUTPUT_DIRECTORY})
 
