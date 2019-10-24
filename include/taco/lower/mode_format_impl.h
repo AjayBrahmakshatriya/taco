@@ -8,6 +8,7 @@
 #include <map>
 
 #include "taco/format.h"
+#include "taco/attr_query/attr_query.h"
 #include "taco/ir/ir.h"
 #include "taco/lower/mode.h"
 
@@ -68,6 +69,10 @@ public:
   /// Create a copy of the mode type with different properties.
   virtual ModeFormat copy(
       std::vector<ModeFormat::Property> properties) const = 0;
+
+
+  virtual std::vector<attr_query::AttrQuery>
+  attrQueries(std::vector<IndexVarExpr> coords) const;
 
 
   /// The coordinate iteration capability's iterator function computes a range

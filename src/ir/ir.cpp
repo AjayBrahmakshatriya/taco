@@ -279,8 +279,8 @@ Expr Add::make(Expr a, Expr b) {
 }
 
 Expr Add::make(Expr a, Expr b, Datatype type) {
-  taco_iassert(!a.type().isBool() && !b.type().isBool()) <<
-      "Can't do arithmetic on booleans.";
+  //taco_iassert(!a.type().isBool() && !b.type().isBool()) <<
+  //    "Can't do arithmetic on booleans.";
 
   Add *add = new Add;
   add->type = type;
@@ -735,6 +735,7 @@ Stmt Yield::make(std::vector<Expr> coords, Expr val) {
 
 // Allocate
 Stmt Allocate::make(Expr var, Expr num_elements, bool is_realloc, Expr old_elements) {
+  std::cout << var << std::endl;
   taco_iassert(var.as<GetProperty>() ||
                (var.as<Var>() && var.as<Var>()->is_ptr)) <<
       "Can only allocate memory for a pointer-typed Var";

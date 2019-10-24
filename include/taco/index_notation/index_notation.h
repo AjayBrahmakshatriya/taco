@@ -990,6 +990,8 @@ IndexStmt makeReductionNotation(IndexStmt);
 /// as needed.
 IndexStmt makeConcreteNotation(IndexStmt);
 
+IndexStmt insertAttributeQueries(IndexStmt);
+
 /// Returns the results of the index statement, in the order they appear.
 std::vector<TensorVar> getResults(IndexStmt stmt);
 

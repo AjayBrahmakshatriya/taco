@@ -32,6 +32,11 @@ Select::Select(const SelectNode* n) : AttrQuery(n) {
 }
 
 Select::Select(const std::vector<IndexVarExpr>& groupBys,
+               const std::pair<AttrQuery,std::string>& attr)
+    : Select(new SelectNode(groupBys, {attr})) {
+}
+
+Select::Select(const std::vector<IndexVarExpr>& groupBys,
                const std::vector<std::pair<AttrQuery,std::string>>& attrs)
     : Select(new SelectNode(groupBys, attrs)) {
 }

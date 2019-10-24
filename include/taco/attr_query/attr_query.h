@@ -60,6 +60,8 @@ public:
   Select() = default;
   Select(const SelectNode*);
   Select(const std::vector<IndexVarExpr>& groupBys,
+         const std::pair<AttrQuery,std::string>& attr);
+  Select(const std::vector<IndexVarExpr>& groupBys,
          const std::vector<std::pair<AttrQuery,std::string>>& attrs);
 
   const std::vector<IndexVarExpr>& getGroupBys() const;

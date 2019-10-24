@@ -404,6 +404,7 @@ void TensorBase::compile(bool assembleWhileCompute) {
   IndexStmt stmt = makeConcreteNotation(makeReductionNotation(assignment));
   stmt = reorderLoopsTopologically(stmt);
   stmt = insertTemporaries(stmt);
+  //stmt = insertAttributeQueries(stmt);
   stmt = parallelizeOuterLoop(stmt);
   content->assembleFunc = lower(stmt, "assemble", true, false);
   content->computeFunc = lower(stmt, "compute",  assembleWhileCompute, true);

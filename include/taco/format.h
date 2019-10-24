@@ -142,7 +142,7 @@ public:
   friend bool operator!=(const ModeFormat&, const ModeFormat&);
   friend std::ostream& operator<<(std::ostream&, const ModeFormat&);
 
-private:
+public:
   std::shared_ptr<const ModeFormatImpl> impl;
 
   friend class ModePack;

@@ -310,6 +310,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Expr resultIR = resultVars.at(result);
         Expr vals = GetProperty::make(resultIR, TensorProperty::Values);
         header.push_back(Allocate::make(vals, 1));
+        std::cout << "back: " << header.back() << std::endl;
       }
     }
   }
@@ -1244,6 +1245,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
                          ? DEFAULT_ALLOC_SIZE : parentSize;
         initArrays.push_back(VarDecl::make(capacityVar, allocSize));
         initArrays.push_back(Allocate::make(valuesArr, capacityVar));
+        std::cout << "back: " << initArrays.back() << std::endl;
       }
 
       taco_iassert(!initArrays.empty());
@@ -1319,6 +1321,7 @@ ir::Stmt LowererImpl::finalizeResultArrays(std::vector<Access> writes) {
       Expr tensor = getTensorVar(write.getTensorVar());
       Expr valuesArr = GetProperty::make(tensor, TensorProperty::Values);
       result.push_back(Allocate::make(valuesArr, parentSize));
+      std::cout << "back: " << result.back() << std::endl;
     }
   }
   return result.empty() ? Stmt() : Block::blanks(result);

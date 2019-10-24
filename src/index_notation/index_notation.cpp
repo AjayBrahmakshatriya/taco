@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <set>
+#include <map>
 
 #include "error/error_checks.h"
 #include "taco/error/error_messages.h"
@@ -20,6 +21,9 @@
 #include "taco/index_notation/index_notation_visitor.h"
 #include "taco/index_notation/index_notation_printer.h"
 #include "taco/ir/ir.h"
+#include "taco/lower/mode_format_impl.h"
+#include "taco/attr_query/attr_query_visitor.h"
+#include "taco/attr_query/attr_query_nodes.h"
 
 #include "taco/util/name_generator.h"
 #include "taco/util/scopedmap.h"
@@ -2086,6 +2090,298 @@ IndexStmt makeConcreteNotation(IndexStmt stmt) {
     }
   };
   stmt = ReplaceReductionsWithWheres().rewrite(stmt);
+  return stmt;
+}
+
+
+IndexStmt insertAttributeQueries(IndexStmt stmt) {
+  std::cout << "stmt: " << stmt << std::endl;
+
+  struct LowerAttrQuery : public attr_query::AttrQueryVisitor {
+    using AttrQueryVisitor::visit;
+
+    std::pair<Assignment,IndexStmt> lower(attr_query::AttrQuery q, Assignment s) {
+      std::cout << q << std::endl;
+      assign = s;
+      aggr = Assignment();
+      epilog = IndexStmt();
+      AttrQueryVisitor::visit(q);
+      return std::make_pair(aggr, epilog);
+    }
+
+    void visit(const attr_query::SelectNode* node) {
+      taco_iassert(node->attrs.size() <= 1);
+      groupBys = node->groupBys;
+      for (const auto& attr : node->attrs) {
+        const std::vector<Dimension> dims(groupBys.size());
+        TensorVar queryResult(attr.second, Type(Int(), dims));
+
+        attr.first.accept(this);
+        IndexExpr val = Map(to<Access>(assign.getRhs()), ifValue);
+        if (tmpResult.defined()) {
+          aggr = Assignment(to<Access>(tmpResult), val, reduceOp);
+
+          std::vector<IndexVar> queryIndices(groupBys.size());
+          Access queryAccess(queryResult, queryIndices);
+
+          std::vector<IndexVar> tmpIndices = queryIndices;
+          tmpIndices.emplace_back();
+          Access tmpAccess(to<Access>(tmpResult).getTensorVar(), tmpIndices);
+          epilog = Assignment(queryAccess, Cast(tmpAccess, Int()), Add());
+          for (const auto index : util::reverse(tmpIndices)) {
+            epilog = forall(index, epilog);
+          }
+        } else {
+          aggr = Assignment(Access(queryResult, groupBys), val, reduceOp);
+        }
+        std::cout << tmpResult << std::endl;
+        std::cout << aggr << std::endl;
+      }
+    }
+
+    void visit(const attr_query::LiteralNode* node) {
+      ifValue = 1;
+      elseValue = 0;
+      reduceOp = IndexExpr();
+      tmpResult = Access();
+    }
+
+    void visit(const attr_query::DistinctCountNode* node) {
+      ifValue = true;
+      elseValue = false;
+      reduceOp = Add();
+      std::vector<Dimension> dims(groupBys.size() + 1);
+      TensorVar tmp("tmp", Type(Bool, dims));
+      std::vector<IndexVarExpr> indices = groupBys;
+      indices.push_back(node->coord);
+      tmpResult = Access(tmp, indices);
+    }
+
+  private:
+    Assignment assign;
+    Assignment aggr;
+    IndexStmt epilog;
+    std::vector<IndexVarExpr> groupBys;
+    IndexExpr ifValue;
+    IndexExpr elseValue;
+    IndexExpr reduceOp;
+    IndexExpr tmpResult;
+  };
+  
+  std::set<TensorVar> tmpResults;
+  struct InsertQueries : IndexNotationRewriter {
+    using IndexNotationRewriter::visit;
+
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps) {
+      tmpResults = tmps;
+      epilogs = IndexStmt();
+      stmt = IndexNotationRewriter::rewrite(stmt);
+      if (epilogs.defined()) {
+        stmt = Where(epilogs, stmt);
+      }
+      return stmt;
+    }
+
+    void visit(const AssignmentNode* op) {
+      const Access result = op->lhs;
+      const auto indices = result.getIndices();
+      const auto modeFormats = result.getTensorVar().getFormat().getModeFormats();
+
+      IndexStmt aggrs;
+      std::vector<IndexVarExpr> sliceIndices;
+      for (size_t i = 0; i < indices.size(); ++i) {
+        const auto index = indices[i];  // TODO: check permutation
+        sliceIndices.push_back(index);
+        std::cout << util::join(sliceIndices) << std::endl;
+
+        const auto modeFormat = modeFormats[i];
+        for (const auto query : modeFormat.impl->attrQueries(sliceIndices)) {
+          Assignment aggr;
+          IndexStmt epilog;
+          std::tie(aggr, epilog) = LowerAttrQuery().lower(query, op);
+          taco_iassert(aggr.defined());
+          if (aggrs.defined()) {
+            taco_not_supported_yet;
+          } else {
+            aggrs = aggr;
+          }
+          if (epilog.defined()) {
+            tmpResults->insert(aggr.getLhs().getTensorVar());
+            if (epilogs.defined()) {
+              taco_not_supported_yet;
+            } else {
+              epilogs = epilog;
+            }
+          }
+        }
+      }
+      stmt = aggrs;
+    }
+  
+  private:
+    IndexStmt epilogs;
+    std::set<TensorVar>* tmpResults;
+  };
+  IndexStmt queries = InsertQueries().rewrite(stmt, &tmpResults);
+
+  struct EliminateRedundantReductions : public IndexNotationRewriter {
+    using IndexNotationRewriter::visit;
+
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps) {
+      tmpResults = tmps;
+      return IndexNotationRewriter::rewrite(stmt);
+    }
+
+    void visit(const ForallNode* op) {
+      indexVars.insert(op->indexVar);
+      IndexNotationRewriter::visit(op);
+      indexVars.erase(op->indexVar);
+    }
+    
+    void visit(const AssignmentNode* op) {
+      std::set<IndexVar> accessVars;
+      for (const auto& index : op->lhs.getIndices()) {
+        if (isa<IndexVarAccess>(index)) {
+          accessVars.insert(to<IndexVarAccess>(index).getIndexVar());
+        }
+      }
+      if (op->op.defined() && accessVars == indexVars && 
+          util::contains(*tmpResults, op->lhs.getTensorVar())) {
+        stmt = new AssignmentNode(op->lhs, op->rhs, IndexExpr());
+      } else {
+        stmt = op;
+      }
+    }
+
+  private:
+    std::set<IndexVar> indexVars;
+    std::set<TensorVar>* tmpResults;
+  };
+  queries = EliminateRedundantReductions().rewrite(queries, &tmpResults);
+
+  std::set<TensorVar> inlinedResults;
+  struct InlineTemporaries : public IndexNotationRewriter {
+    using IndexNotationRewriter::rewrite;
+
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps,
+                      std::set<TensorVar>* inlined) {
+      tmpResults = tmps;
+      inlinedResults = inlined;
+      return IndexNotationRewriter::rewrite(stmt);
+    }
+    
+    void visit(const WhereNode* op) {
+      IndexStmt consumer = rewrite(op->consumer);
+      IndexStmt producer = rewrite(op->producer);
+      if (producer == op->producer && consumer == op->consumer) {
+        stmt = op;
+      } else {
+        stmt = new WhereNode(consumer, producer);
+      }
+    }
+
+    void visit(const AssignmentNode* op) {
+      const auto lhsTensor = op->lhs.getTensorVar();
+      if (util::contains(tmpUse, lhsTensor) && !op->op.defined()) {
+        std::map<IndexVar,IndexVarExpr> indexMap;
+        for (const auto mapping : util::zip(to<Access>(tmpUse[lhsTensor].first).getIndices(), op->lhs.getIndices())) {
+          indexMap[to<IndexVarAccess>(mapping.first).getIndexVar()] = mapping.second;
+        }
+
+        struct ReplaceIndex : public IndexVarExprRewriter {
+          ReplaceIndex(const std::map<IndexVar,IndexVarExpr>& indexMap) : indexMap(indexMap) {}
+
+          void visit(const IndexVarAccessNode* op) {
+            expr = indexMap.at(op->ivar);
+          }
+
+          const std::map<IndexVar,IndexVarExpr>& indexMap;
+        };
+
+        std::vector<IndexVarExpr> indices;
+        for (const auto index : tmpUse[lhsTensor].second.getLhs().getIndices()) {
+          std::cout << index << std::endl;
+          indices.push_back(ReplaceIndex(indexMap).rewrite(index));
+        }
+        IndexExpr reduceOp = tmpUse[lhsTensor].second.getOperator();
+        TensorVar queryResult = tmpUse[lhsTensor].second.getLhs().getTensorVar();
+        IndexExpr rhs = op->rhs;
+        if (rhs.getDataType() != queryResult.getType().getDataType()) {
+          rhs = Cast(rhs, queryResult.getType().getDataType());
+        }
+        std::cout << Assignment(op) << std::endl;
+        std::cout << util::join(indexMap) << std::endl;
+        std::cout << util::join(indices) << std::endl;
+        stmt = Assignment(Access(queryResult, indices), rhs, reduceOp);
+        inlinedResults->insert(queryResult);
+      } else {
+        const Access rhsAccess = isa<Access>(op->rhs) ? to<Access>(op->rhs)
+            : (isa<Cast>(op->rhs) && isa<Access>(to<Cast>(op->rhs).getA()))
+              ? to<Access>(to<Cast>(op->rhs).getA()) : Access();
+        if (rhsAccess.defined()) {
+          const auto rhsTensor = rhsAccess.getTensorVar();
+          if (util::contains(*tmpResults, rhsTensor)) {
+            tmpUse[rhsTensor] = std::make_pair(rhsAccess, Assignment(op));
+            std::cout << rhsAccess << std::endl;
+          }
+        }
+        stmt = op;
+      }
+    }
+
+  private:
+    std::set<TensorVar>* tmpResults;
+    std::set<TensorVar>* inlinedResults;
+    std::map<TensorVar,std::pair<IndexExpr,Assignment>> tmpUse;
+  };
+  queries = InlineTemporaries().rewrite(queries, &tmpResults, &inlinedResults);
+
+  struct EliminateRedundantAggr : public IndexNotationRewriter {
+    using IndexNotationRewriter::rewrite;
+
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* inlined) {
+      inlinedResults = inlined;
+      return IndexNotationRewriter::rewrite(stmt);
+    }
+    
+    void visit(const ForallNode* op) {
+      IndexStmt s = rewrite(op->stmt);
+      if (s == op->stmt) {
+        stmt = op;
+      } else if (s.defined()) {
+        stmt = new ForallNode(op->indexVar, s, op->tags);
+      } else {
+        stmt = IndexStmt();
+      }
+    }
+
+    void visit(const WhereNode* op) {
+      IndexStmt consumer = rewrite(op->consumer);
+      if (consumer == op->consumer) {
+        stmt = op;
+      } else if (consumer.defined()) {
+        stmt = new WhereNode(consumer, op->producer);
+      } else {
+        stmt = op->producer;
+      }
+    }
+
+    void visit(const AssignmentNode* op) {
+      const auto lhsTensor = op->lhs.getTensorVar();
+      if (util::contains(*inlinedResults, lhsTensor)) {
+        stmt = IndexStmt();
+      } else {
+        stmt = op;
+      }
+    }
+  
+  private:
+    std::set<TensorVar>* inlinedResults;
+  };
+  queries = EliminateRedundantAggr().rewrite(queries, &inlinedResults);
+
+  std::cout << queries << std::endl;
+  return Multi(queries, stmt);
   return stmt;
 }
 

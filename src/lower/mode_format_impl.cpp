@@ -68,6 +68,11 @@ ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull,
 ModeFormatImpl::~ModeFormatImpl() {
 }
 
+std::vector<attr_query::AttrQuery>
+ModeFormatImpl::attrQueries(std::vector<IndexVarExpr> coords) const {
+  return std::vector<attr_query::AttrQuery>();
+}
+
 ModeFunction ModeFormatImpl::coordIterBounds(vector<Expr> coords,
                                            Mode mode) const {
   return ModeFunction();
