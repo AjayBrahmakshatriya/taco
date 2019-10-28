@@ -2169,8 +2169,8 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
   };
   
   std::set<TensorVar> tmpResults;
-  struct InsertQueries : IndexNotationRewriter {
-    using IndexNotationRewriter::visit;
+  struct InsertQueries : public IndexNotationRewriter {
+    using IndexNotationRewriter::rewrite;
 
     IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps) {
       tmpResults = tmps;
@@ -2180,6 +2180,17 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
         stmt = Where(epilogs, stmt);
       }
       return stmt;
+    }
+
+    void visit(const ForallNode* op) {
+      IndexStmt s = rewrite(op->stmt);
+      if (s == op->stmt) {
+        stmt = op;
+      } else if (s.defined()) {
+        stmt = new ForallNode(op->indexVar, s, op->tags);
+      } else {
+        stmt = IndexStmt();
+      }
     }
 
     void visit(const AssignmentNode* op) {
@@ -2192,7 +2203,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       for (size_t i = 0; i < indices.size(); ++i) {
         const auto index = indices[i];  // TODO: check permutation
         sliceIndices.push_back(index);
-        std::cout << util::join(sliceIndices) << std::endl;
 
         const auto modeFormat = modeFormats[i];
         for (const auto query : modeFormat.impl->attrQueries(sliceIndices)) {
@@ -2380,9 +2390,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
   };
   queries = EliminateRedundantAggr().rewrite(queries, &inlinedResults);
 
-  std::cout << queries << std::endl;
-  return Multi(queries, stmt);
-  return stmt;
+  return queries.defined() ? Multi(queries, stmt) : stmt;
 }
 
 
