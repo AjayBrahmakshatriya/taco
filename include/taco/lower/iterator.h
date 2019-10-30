@@ -74,6 +74,9 @@ public:
   bool hasLocate() const;
   bool hasInsert() const;
   bool hasAppend() const;
+  bool hasSeqInsertEdge() const;
+  bool hasUnseqInsertEdge() const;
+  bool hasInitYieldPos() const;
 
   /// Get the index variable this iterator iteratores over.
   IndexVar getIndexVar() const;
@@ -152,6 +155,22 @@ public:
   ir::Stmt getAppendInitLevel(const ir::Expr& szPrev, const ir::Expr& sz) const;
   ir::Stmt getAppendFinalizeLevel(const ir::Expr& szPrev, 
       const ir::Expr& sz) const;
+  
+  /// Return code for level functions that implement ungrouped insert capabilitiy.
+  ir::Expr getSizeNew(const ir::Expr& prevSize) const;
+  ir::Stmt getSeqInitEdges(const ir::Expr& prevSize, 
+      const std::map<std::string,AttrQueryResult>& queries) const;
+  ir::Stmt getSeqInsertEdge(const ir::Expr& parentPos, 
+      const std::vector<ir::Expr>& coords, 
+      const std::map<std::string,AttrQueryResult>& queries) const;
+  ir::Stmt getInitCoords(const ir::Expr& prevSize, 
+      const std::map<std::string,AttrQueryResult>& queries) const;
+  ir::Stmt getInitYieldPos(const ir::Expr& prevSize) const;
+  ModeFunction getYieldPos(const ir::Expr& parentPos, 
+      const std::vector<ir::Expr>& coords) const;
+  ir::Stmt getInsertCoord(const ir::Expr& parentPos, const ir::Expr& pos, 
+      const std::vector<ir::Expr>& coords) const;
+  ir::Stmt getFinalizeLevel() const;
 
   /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;

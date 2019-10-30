@@ -6,6 +6,7 @@
 #include <set>
 #include <memory>
 #include <utility>
+#include <string>
 
 #include "taco/lower/iterator.h"
 #include "taco/util/scopedset.h"
@@ -405,6 +406,9 @@ private:
   util::ScopedSet<Iterator> accessibleIterators;
 
   std::map<std::vector<IndexVar>, Counter> counters;
+
+  Iterator topResultIterator;
+  Iterator nextTopResultIterator;
 
   /// Visitor methods can add code to emit it to the function header.
   std::vector<ir::Stmt> header;

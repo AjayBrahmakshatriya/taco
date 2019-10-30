@@ -11,6 +11,7 @@
 #include "taco/attr_query/attr_query.h"
 #include "taco/ir/ir.h"
 #include "taco/lower/mode.h"
+#include "taco/index_notation/index_notation.h"
 
 namespace taco {
 
@@ -53,6 +54,24 @@ private:
 
 std::ostream& operator<<(std::ostream&, const ModeFunction&);
 
+class AttrQueryResult {
+public:
+  AttrQueryResult() = default;
+
+  AttrQueryResult(TensorVar resultVar, ir::Expr resultVarExpr);
+
+  std::string getName() const;
+
+  ir::Expr getResult(const std::vector<ir::Expr>& indices, 
+                     const std::string& attr) const;
+
+private:
+  TensorVar resultVar;
+  ir::Expr  resultVarExpr;
+};
+
+std::ostream& operator<<(std::ostream&, const AttrQueryResult&);
+
 
 /// The abstract class to inherit from to add a new mode format to the system.
 /// The mode type implementation can then be passed to the `ModeType`
@@ -62,7 +81,8 @@ public:
   ModeFormatImpl(std::string name, bool isFull, bool isOrdered, bool isUnique, 
                  bool isBranchless, bool isCompact, bool hasCoordValIter, 
                  bool hasCoordPosIter, bool hasLocate, bool hasInsert, 
-                 bool hasAppend);
+                 bool hasAppend, bool hasSeqInsertEdge, bool hasUnseqInsertEdge, 
+                 bool hasInitYieldPos);
 
   virtual ~ModeFormatImpl();
 
@@ -150,6 +170,39 @@ public:
   virtual ir::Stmt
   getAppendFinalizeLevel(ir::Expr szPrev, ir::Expr sz, Mode mode) const;
   /// @}
+  
+  /// Level functions that implement ungrouped insert capabilitiy.
+  /// @{
+  virtual ir::Expr getSizeNew(ir::Expr prevSize, Mode mode) const;
+
+  virtual ir::Stmt
+  getSeqInitEdges(ir::Expr prevSize, 
+                  std::map<std::string,AttrQueryResult> queries, 
+                  Mode mode) const;
+  
+  virtual ir::Stmt
+  getSeqInsertEdge(ir::Expr parentPos, std::vector<ir::Expr> coords,
+                   std::map<std::string,AttrQueryResult> queries, 
+                   Mode mode) const;
+
+  virtual ir::Stmt
+  getInitCoords(ir::Expr prevSize, 
+                std::map<std::string,AttrQueryResult> queries, Mode mode) const;
+
+  virtual ir::Stmt
+  getInitYieldPos(ir::Expr prevSize, Mode mode) const;
+  
+  virtual ModeFunction
+  getYieldPos(ir::Expr parentPos, std::vector<ir::Expr> coords, 
+              Mode mode) const;
+
+  virtual ir::Stmt
+  getInsertCoord(ir::Expr parentPos, ir::Expr pos, std::vector<ir::Expr> coords, 
+                 Mode mode) const;
+
+  virtual ir::Stmt
+  getFinalizeLevel(Mode mode) const;
+  /// @}
 
   /// Returns arrays associated with a tensor mode
   virtual std::vector<ir::Expr>
@@ -171,6 +224,9 @@ public:
   const bool hasLocate;
   const bool hasInsert;
   const bool hasAppend;
+  const bool hasSeqInsertEdge;
+  const bool hasUnseqInsertEdge;
+  const bool hasInitYieldPos;
 
 protected:
   /// Check if other mode format is identical. Can assume that this method will 

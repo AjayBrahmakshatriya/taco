@@ -12,6 +12,7 @@
 #include "mode_access.h"
 #include "taco/util/collections.h"
 #include "taco/util/name_generator.h"
+#include "taco/lower/mode_format_impl.h"
 
 #include <algorithm>
 
@@ -161,9 +162,25 @@ static std::vector<IndexVar> getRhsFreeVars(IndexStmt stmt) {
   return result; 
 }
 
+static std::map<Iterator,std::map<std::string,AttrQueryResult>>
+splitAttrQueryResults(const std::vector<Iterator>& resultIterators,
+                      const std::map<std::string,AttrQueryResult>& queryResults) {
+  std::map<Iterator,std::map<std::string,AttrQueryResult>> ret;
+  for (const auto& it : resultIterators) {
+    const auto prefix = it.getMode().getName() + "_attr_";
+    for (const auto& result : queryResults) {
+      if (result.first.find(prefix) != std::string::npos) {
+        ret[it][result.first.substr(prefix.length())] = result.second;
+      }
+    }
+  }
+  return ret;
+}
+
 Stmt
 LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 {
+  std::cout << stmt << std::endl;
   this->assemble = assemble;
   this->compute = compute;
 
@@ -334,7 +351,84 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   Stmt freeCounters = Block::make(freeCounterStmts);
 
   // Lower the index statement to compute and/or assemble
-  Stmt body = lower(stmt);
+  // TODO: handle mutli-statements without attribute queries
+  std::vector<Stmt> body;
+  std::map<std::string,AttrQueryResult> queryResults;
+  while (isa<Multi>(stmt)) {
+    IndexStmt query = to<Multi>(stmt).getStmt1();
+    for (const auto& queryAccess : getResultAccesses(query).first) {
+      const auto queryVar = queryAccess.getTensorVar();
+      queryResults[queryVar.getName()] = AttrQueryResult(queryVar, getTensorVar(queryVar));
+    }
+    body.push_back(lower(query));
+    stmt = to<Multi>(stmt).getStmt2();
+  }
+  std::cout << util::join(queryResults) << std::endl;
+  
+  // TODO: fix assumption that there is only one output
+  const auto resultAccess = getResultAccesses(stmt).first.front();
+  const auto resultIterators = getIterators(resultAccess);
+  const auto modeQueryResults = splitAttrQueryResults(resultIterators, queryResults);
+  std::vector<Iterator> topResultIterators = {resultIterators.front().getParent()};
+  for (const auto& resultIterator : resultIterators) {
+    if (resultIterator.hasSeqInsertEdge() || 
+        resultIterator.hasUnseqInsertEdge()) {
+      topResultIterators.push_back(resultIterator);
+    }
+  }
+
+#if 1
+  const auto resultTensor = resultAccess.getTensorVar();
+  for (size_t i = 0; i < topResultIterators.size(); ++i) {
+    this->topResultIterator = topResultIterators[i];
+    this->nextTopResultIterator = Iterator();
+    if (i + 1 < topResultIterators.size()) {
+      this->nextTopResultIterator = topResultIterators[i+1];
+    }
+
+    if (!this->topResultIterator.isRoot()) {
+      Iterator iter = this->topResultIterator.getParent();
+
+      bool isSeqIter = iter.isCompact();
+      for (Iterator it = iter; isSeqIter && !it.isRoot(); it = it.getParent()) {
+        isSeqIter = iter.hasPosIter() || iter.isOrdered();
+      }
+
+      Stmt insertEdgeLoop;
+      if (isSeqIter) {
+        insertEdgeLoop = this->topResultIterator.getSeqInsertEdge(iter.getPosVar(), 
+                                               coordinates(iter),
+                                               modeQueryResults.at(this->topResultIterator));
+      } else {
+        taco_not_supported_yet;
+      }
+      std::cout << insertEdgeLoop << std::endl;
+
+      while (!iter.isRoot()) {
+        if (iter.hasPosIter()) {
+          taco_not_supported_yet;
+        } else if (iter.hasCoordIter()) {
+          taco_not_supported_yet;
+        } else {
+          Expr dim = GetProperty::make(tensorVars.at(resultTensor),
+                                       TensorProperty::Dimension, 
+                                       iter.getMode().getLevel() - 1);
+          Expr coord = Var::make("i" + iter.getMode().getName(), Int());
+          insertEdgeLoop = For::make(coord, 0, dim, 1, insertEdgeLoop);
+        }
+        iter = iter.getParent();
+      }
+
+      Stmt initEdges;
+      Stmt finalizeEdges;
+      body.push_back(Block::make(initEdges, insertEdgeLoop, finalizeEdges));
+    }
+
+    body.push_back(lower(stmt));
+  }
+#else
+  body.push_back(lower(stmt));
+#endif
 
   // Post-process result modes and allocate memory for values if necessary
   Stmt finalizeResults = finalizeResultArrays(resultAccesses);
@@ -358,7 +452,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
                         Block::blanks(Block::make(header),
                                       allocCounters,
                                       initializeResults,
-                                      body,
+                                      Block::make(body),
                                       finalizeResults,
                                       freeCounters,
                                       Block::make(footer)));
@@ -390,11 +484,16 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
 
       std::vector<Stmt> accessStmts;
 
+      // TODO: emit this when only assembling as well
       Expr prevPos = 0;
       size_t i = 0;
       const auto resultIterators = getIterators(assignment.getLhs());
       const auto resultIndices = assignment.getLhs().getIndices();
       for (const auto it : util::zip(resultIterators, resultIndices)) {
+        if (it.first == this->nextTopResultIterator) {
+          break;
+        }
+
         const auto coord = lower(it.second);
         accessStmts.push_back(coord.first);
 
@@ -416,11 +515,13 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
         ++i;
       }
 
-      if (!assignment.getOperator().defined()) {
-        accessStmts.push_back(Store::make(values, loc, rhs));
-      }
-      else {
-        accessStmts.push_back(compoundStore(values, loc, rhs));
+      if (!this->nextTopResultIterator.defined()) {
+        if (!assignment.getOperator().defined()) {
+          accessStmts.push_back(Store::make(values, loc, rhs));
+        }
+        else {
+          accessStmts.push_back(compoundStore(values, loc, rhs));
+        }
       }
 
       return Block::make(accessStmts);
@@ -543,7 +644,9 @@ Stmt LowererImpl::lowerForall(Forall forall)
   }
 //  taco_iassert(loops.defined());
 
-  if (!generateComputeCode() && !hasStores(loops)) {
+  // TODO: fix scalar reductions
+  //if (!generateComputeCode() && !hasStores(loops)) {
+  if (!hasStores(loops)) {
     // If assembly loop does not modify output arrays, then it can be safely 
     // omitted.
     loops = Stmt();
@@ -801,7 +904,7 @@ Stmt LowererImpl::lowerForallBody(Expr coordinate, Forall stmt,
   Stmt getCounters = getCounterCounts(stmt);
 
   // Inserter positions
-  Stmt declInserterPosVars = declLocatePosVars(inserters);
+  Stmt declInserterPosVars = Stmt(); //declLocatePosVars(inserters);
 
   // Locate positions
   Stmt declLocatorPosVars = declLocatePosVars(locators);
@@ -1173,11 +1276,19 @@ bool hasSparseInserts(const std::vector<Iterator>& resultIterators,
     if (resultIterator.hasInsert()) {
       const auto indexVar = resultIterator.getIndexVar();
       const auto accessedInputs = inputIterators.equal_range(indexVar);
+      bool indexVarIndexesInputs = false;
       for (auto inputIterator = accessedInputs.first; 
            inputIterator != accessedInputs.second; ++inputIterator) {
+        indexVarIndexesInputs = true;
         if (!inputIterator->second.isFull()) {
           return true;
         }
+      }
+      if (!indexVarIndexesInputs) {
+        // TODO: Temporary hack that's overly pessimistic. Should distinguish 
+        // between broadcasted dimensions and dimensions that are indexed by 
+        // functions of index variables that also index the inputs.
+        return true;
       }
     }
   }
@@ -1220,7 +1331,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
           size = simplify(ir::Mul::make(parentSize, iterator.getWidth()));
           init = iterator.getInsertInitLevel(parentSize, size);
         } else {
-          taco_ierror << "Write iterator supports neither append nor insert";
+          size = simplify(iterator.getSizeNew(parentSize));
         }
         initArrays.push_back(init);
 
@@ -1259,7 +1370,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
         } else if (iterator.hasInsert()) {
           parentSize = ir::Mul::make(parentSize, iterator.getWidth());
         } else {
-          taco_ierror << "Write iterator supports neither append nor insert";
+          parentSize = iterator.getSizeNew(parentSize);
         }
         parentSize = simplify(parentSize);
       }
@@ -1270,7 +1381,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
       }
     }
 
-    if (generateComputeCode() && iterators.back().hasInsert() && 
+    if (generateComputeCode() && !iterators.back().hasAppend() && 
         !isValue(parentSize, 0) && 
         (hasSparseInserts(iterators, readIterators) || 
          util::contains(reducedAccesses, write))) {
@@ -1308,7 +1419,7 @@ ir::Stmt LowererImpl::finalizeResultArrays(std::vector<Access> writes) {
         size = simplify(ir::Mul::make(parentSize, iterator.getWidth()));
         finalize = iterator.getInsertFinalizeLevel(parentSize, size);
       } else {
-        taco_ierror << "Write iterator supports neither append nor insert";
+        size = iterator.getSizeNew(parentSize);
       }
       result.push_back(finalize);
       parentSize = size;
@@ -1382,6 +1493,7 @@ Stmt LowererImpl::initResultArrays(IndexVar var, vector<Access> writes,
       result.push_back(VarDecl::make(begin, resultIterator.getPosVar()));
     }
 
+    continue;
     const bool isTopLevel = (iterators.size() == write.getIndices().size());
     if (resultIterator.getParent().hasAppend() || isTopLevel) {
       Expr resultParentPos = resultIterator.getParent().getPosVar();

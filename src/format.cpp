@@ -262,6 +262,21 @@ bool ModeFormat::hasAppend() const {
   return impl->hasAppend;
 }
 
+bool ModeFormat::hasSeqInsertEdge() const {
+  taco_iassert(defined());
+  return impl->hasSeqInsertEdge;
+}
+
+bool ModeFormat::hasUnseqInsertEdge() const {
+  taco_iassert(defined());
+  return impl->hasUnseqInsertEdge;
+}
+
+bool ModeFormat::hasInitYieldPos() const {
+  taco_iassert(defined());
+  return impl->hasInitYieldPos;
+}
+
 bool ModeFormat::defined() const {
   return impl != nullptr;
 }

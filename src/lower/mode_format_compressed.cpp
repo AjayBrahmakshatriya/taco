@@ -16,7 +16,7 @@ CompressedModeFormat::CompressedModeFormat() :
 CompressedModeFormat::CompressedModeFormat(bool isFull, bool isOrdered,
                                        bool isUnique, long long allocSize) :
     ModeFormatImpl("compressed", isFull, isOrdered, isUnique, false, true,
-                   false, true, false, false, true), 
+                   false, true, false, false, false, true, true, true), 
     allocSize(allocSize) {
 }
 
@@ -56,10 +56,14 @@ ModeFormat CompressedModeFormat::copy(
 
 std::vector<attr_query::AttrQuery>
 CompressedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
+#if 1
   std::vector<IndexVarExpr> groupBys(coords.begin(), coords.end() - 1);
   const auto countQuery = attr_query::Select(groupBys, 
-      std::make_pair(attr_query::DistinctCount(coords.back()), "nnz_per_row"));
+      std::make_pair(attr_query::DistinctCount(coords.back()), "nnz"));
   return {countQuery};
+#else
+  return {attr_query::Select({coords.back()}, std::make_pair(attr_query::Literal(1), "nonempty"))};
+#endif
 }
 
 ModeFunction CompressedModeFormat::posIterBounds(Expr parentPos, 
@@ -187,6 +191,61 @@ Stmt CompressedModeFormat::getAppendFinalizeLevel(Expr szPrev,
   return Block::make({initCs, finalizeLoop});
 }
 
+Expr CompressedModeFormat::getSizeNew(Expr prevSize, Mode mode) const {
+  return Load::make(getPosArray(mode.getModePack()), prevSize);
+}
+
+Stmt CompressedModeFormat::getSeqInitEdges(Expr prevSize, 
+    std::map<std::string,AttrQueryResult> queries, Mode mode) const {
+  Expr posArray = getPosArray(mode.getModePack());
+  return Block::make({Allocate::make(posArray, ir::Add::make(prevSize, 1)),
+                      Store::make(posArray, 0, 0)});
+}
+
+Stmt CompressedModeFormat::getSeqInsertEdge(Expr parentPos, 
+    std::vector<Expr> coords, std::map<std::string,AttrQueryResult> queries, 
+    Mode mode) const {
+  Expr posArray = getPosArray(mode.getModePack());
+  Expr prevPos = Load::make(posArray, parentPos);
+  Expr nnz = queries["nnz"].getResult(coords, "nnz");
+  Expr pos = ir::Add::make(prevPos, nnz);
+  return Store::make(posArray, ir::Add::make(parentPos, 1), pos);
+}
+
+Stmt CompressedModeFormat::getInitCoords(Expr prevSize, 
+    std::map<std::string,AttrQueryResult> queries, Mode mode) const {
+  Expr posArray = getPosArray(mode.getModePack());
+  Expr crdArray = getCoordArray(mode.getModePack());
+  return Allocate::make(crdArray, Load::make(posArray, prevSize));
+}
+
+Stmt CompressedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
+  return Stmt();
+}
+
+ModeFunction CompressedModeFormat::getYieldPos(Expr parentPos, 
+    std::vector<Expr> coords, Mode mode) const {
+  Expr ptrArr = getPtr(mode);
+  Expr loadPtr = Load::make(ptrArr, parentPos);
+  Expr pVar = Var::make("p" + mode.getName(), Int());
+  Stmt getPtr = VarDecl::make(pVar, loadPtr);
+  Stmt incPtr = Store::make(ptrArr, parentPos, ir::Add::make(loadPtr, 1));
+  return ModeFunction(Block::make(getPtr, incPtr), {pVar});
+}
+
+Stmt CompressedModeFormat::getInsertCoord(Expr parentPos, Expr pos, 
+    std::vector<Expr> coords, Mode mode) const {
+  taco_iassert(mode.getPackLocation() == 0);
+  Expr crdArray = getCoordArray(mode.getModePack());
+  Expr stride = (int)mode.getModePack().getNumModes();
+  return Store::make(crdArray, ir::Mul::make(pos, stride), coords.back());
+
+}
+
+Stmt CompressedModeFormat::getFinalizeLevel(Mode mode) const {
+  return Free::make(getPtr(mode));
+}
+
 vector<Expr> CompressedModeFormat::getArrays(Expr tensor, int mode, 
                                              int level) const {
   std::string arraysName = util::toString(tensor) + std::to_string(level);
@@ -223,6 +282,18 @@ Expr CompressedModeFormat::getCoordCapacity(Mode mode) const {
     Expr idxCapacity = Var::make(varName, Int());
     mode.addVar(varName, idxCapacity);
     return idxCapacity;
+  }
+
+  return mode.getVar(varName);
+}
+
+Expr CompressedModeFormat::getPtr(Mode mode) const {
+  const std::string varName = mode.getName() + "_ptr";
+  
+  if (!mode.hasVar(varName)) {
+    Expr ptr = Var::make(varName, Int(), true);
+    mode.addVar(varName, ptr);
+    return ptr;
   }
 
   return mode.getVar(varName);

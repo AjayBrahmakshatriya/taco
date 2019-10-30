@@ -7,6 +7,7 @@
 #include <utility>
 #include <set>
 #include <map>
+#include <string>
 
 #include "error/error_checks.h"
 #include "taco/error/error_messages.h"
@@ -2100,9 +2101,11 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
   struct LowerAttrQuery : public attr_query::AttrQueryVisitor {
     using AttrQueryVisitor::visit;
 
-    std::pair<Assignment,IndexStmt> lower(attr_query::AttrQuery q, Assignment s) {
+    std::pair<Assignment,IndexStmt> lower(attr_query::AttrQuery q, 
+                                          Assignment s, std::string name) {
       std::cout << q << std::endl;
       assign = s;
+      modeName = name + "_attr_";
       aggr = Assignment();
       epilog = IndexStmt();
       AttrQueryVisitor::visit(q);
@@ -2112,9 +2115,14 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     void visit(const attr_query::SelectNode* node) {
       taco_iassert(node->attrs.size() <= 1);
       groupBys = node->groupBys;
+      std::vector<Dimension> dims;
+      for (const auto index : groupBys) {
+        const auto pos = std::find(groupBys.begin(), groupBys.end(), index) - groupBys.begin();
+        dims.push_back(assign.getLhs().getTensorVar().getType().getShape().getDimension(pos));
+      }
+
       for (const auto& attr : node->attrs) {
-        const std::vector<Dimension> dims(groupBys.size());
-        TensorVar queryResult(attr.second, Type(Int(), dims));
+        TensorVar queryResult(modeName + attr.second, Type(Int(), dims));
 
         attr.first.accept(this);
         IndexExpr val = Map(to<Access>(assign.getRhs()), ifValue);
@@ -2166,6 +2174,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     IndexExpr elseValue;
     IndexExpr reduceOp;
     IndexExpr tmpResult;
+    std::string modeName;
   };
   
   std::set<TensorVar> tmpResults;
@@ -2194,21 +2203,23 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     }
 
     void visit(const AssignmentNode* op) {
-      const Access result = op->lhs;
-      const auto indices = result.getIndices();
-      const auto modeFormats = result.getTensorVar().getFormat().getModeFormats();
+      const auto resultAccess = op->lhs;
+      const auto resultTensor = resultAccess.getTensorVar();
+      const auto indices = resultAccess.getIndices();
+      const auto modeFormats = resultTensor.getFormat().getModeFormats();
 
       IndexStmt aggrs;
       std::vector<IndexVarExpr> sliceIndices;
       for (size_t i = 0; i < indices.size(); ++i) {
         const auto index = indices[i];  // TODO: check permutation
+        const auto modeName = resultTensor.getName() + std::to_string(i + 1);
         sliceIndices.push_back(index);
 
         const auto modeFormat = modeFormats[i];
         for (const auto query : modeFormat.impl->attrQueries(sliceIndices)) {
           Assignment aggr;
           IndexStmt epilog;
-          std::tie(aggr, epilog) = LowerAttrQuery().lower(query, op);
+          std::tie(aggr, epilog) = LowerAttrQuery().lower(query, op, modeName);
           taco_iassert(aggr.defined());
           if (aggrs.defined()) {
             taco_not_supported_yet;

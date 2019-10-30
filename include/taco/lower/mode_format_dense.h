@@ -27,6 +27,11 @@ public:
   virtual ir::Stmt getInsertFinalizeLevel(ir::Expr szPrev, ir::Expr sz, 
                                           Mode mode) const;
   
+  virtual ir::Expr getSizeNew(ir::Expr prevSize, Mode mode) const;
+  virtual ModeFunction getYieldPos(ir::Expr parentPos, 
+                                   std::vector<ir::Expr> coords, 
+                                   Mode mode) const;
+  
   virtual std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode, 
                                           int level) const;
 

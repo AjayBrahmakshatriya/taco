@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <vector>
+#include <map>
 
 #include "taco/util/collections.h"
 #include "taco/util/strings.h"
@@ -53,16 +54,43 @@ std::ostream& operator<<(std::ostream& os, const ModeFunction& modeFunction) {
 }
 
 
+// class AttrQueryResult
+AttrQueryResult::AttrQueryResult(TensorVar resultVar, Expr resultVarExpr) 
+    : resultVar(resultVar), resultVarExpr(resultVarExpr) {}
+
+std::string AttrQueryResult::getName() const {
+  return resultVar.getName();
+}
+
+Expr AttrQueryResult::getResult(const std::vector<Expr>& indices,
+                                const std::string& attr) const {
+  Expr pos = 0;
+  for (size_t i = 0; i < indices.size(); ++i) {
+    Expr dim = GetProperty::make(resultVarExpr, TensorProperty::Dimension, i);
+    pos = ir::Add::make(ir::Mul::make(pos, dim), indices[i]);
+  }
+  return Load::make(resultVarExpr, pos);
+}
+
+std::ostream& operator<<(std::ostream& os, const AttrQueryResult& result) {
+  return os << result.getName();
+}
+
+
 // class ModeTypeImpl
 ModeFormatImpl::ModeFormatImpl(const std::string name, bool isFull, 
                                bool isOrdered, bool isUnique, bool isBranchless, 
                                bool isCompact, bool hasCoordValIter, 
                                bool hasCoordPosIter, bool hasLocate, 
-                               bool hasInsert, bool hasAppend) :
+                               bool hasInsert, bool hasAppend,
+                               bool hasSeqInsertEdge, bool hasUnseqInsertEdge,
+                               bool hasInitYieldPos) :
     name(name), isFull(isFull), isOrdered(isOrdered), isUnique(isUnique),
     isBranchless(isBranchless), isCompact(isCompact),
     hasCoordValIter(hasCoordValIter), hasCoordPosIter(hasCoordPosIter),
-    hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend) {
+    hasLocate(hasLocate), hasInsert(hasInsert), hasAppend(hasAppend),
+    hasSeqInsertEdge(hasSeqInsertEdge), hasUnseqInsertEdge(hasUnseqInsertEdge),
+    hasInitYieldPos(hasInitYieldPos) {
 }
 
 ModeFormatImpl::~ModeFormatImpl() {
@@ -150,6 +178,43 @@ Stmt ModeFormatImpl::getAppendInitLevel(Expr szPrev,
 
 Stmt ModeFormatImpl::getAppendFinalizeLevel(Expr szPrev,
     Expr sz, Mode mode) const {
+  return Stmt();
+}
+  
+Expr ModeFormatImpl::getSizeNew(Expr prevSize, Mode mode) const {
+  return Expr();
+}
+
+Stmt ModeFormatImpl::getSeqInitEdges(Expr prevSize, 
+    std::map<std::string,AttrQueryResult> queries, Mode mode) const {
+  return Stmt();
+}
+
+Stmt ModeFormatImpl::getSeqInsertEdge(Expr parentPos, std::vector<Expr> coords,
+    std::map<std::string,AttrQueryResult> queries, Mode mode) const {
+  return Stmt();
+}
+
+Stmt ModeFormatImpl::getInitCoords(Expr prevSize, 
+    std::map<std::string,AttrQueryResult> queries, Mode mode) const {
+  return Stmt();
+}
+
+Stmt ModeFormatImpl::getInitYieldPos(Expr prevSize, Mode mode) const {
+  return Stmt();
+}
+
+ModeFunction ModeFormatImpl::getYieldPos(Expr parentPos, 
+    std::vector<Expr> coords, Mode mode) const {
+  return ModeFunction();
+}
+
+Stmt ModeFormatImpl::getInsertCoord(Expr parentPos, Expr pos, 
+    std::vector<Expr> coords, Mode mode) const {
+  return Stmt();
+}
+
+Stmt ModeFormatImpl::getFinalizeLevel(Mode mode) const {
   return Stmt();
 }
 
