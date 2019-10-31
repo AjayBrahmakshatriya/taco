@@ -65,11 +65,12 @@ std::string AttrQueryResult::getName() const {
 Expr AttrQueryResult::getResult(const std::vector<Expr>& indices,
                                 const std::string& attr) const {
   Expr pos = 0;
-  for (size_t i = 0; i < indices.size(); ++i) {
+  for (int i = indices.size() - 1; i >= 0; --i) {
     Expr dim = GetProperty::make(resultVarExpr, TensorProperty::Dimension, i);
     pos = ir::Add::make(ir::Mul::make(pos, dim), indices[i]);
   }
-  return Load::make(resultVarExpr, pos);
+  Expr resultArray = GetProperty::make(resultVarExpr, TensorProperty::Values);
+  return Load::make(resultArray, pos);
 }
 
 std::ostream& operator<<(std::ostream& os, const AttrQueryResult& result) {

@@ -167,6 +167,7 @@ splitAttrQueryResults(const std::vector<Iterator>& resultIterators,
                       const std::map<std::string,AttrQueryResult>& queryResults) {
   std::map<Iterator,std::map<std::string,AttrQueryResult>> ret;
   for (const auto& it : resultIterators) {
+    ret[it];
     const auto prefix = it.getMode().getName() + "_attr_";
     for (const auto& result : queryResults) {
       if (result.first.find(prefix) != std::string::npos) {
@@ -175,6 +176,25 @@ splitAttrQueryResults(const std::vector<Iterator>& resultIterators,
     }
   }
   return ret;
+}
+
+static Expr getPrevSize(const Iterator iter) {
+  if (iter.isRoot()) {
+    return 0;
+  }
+  
+  Iterator it = iter;
+  while (!it.isRoot()) {
+    it = it.getParent();
+  }
+  it = it.getChild();
+
+  Expr prevSize = 1;
+  while (it != iter) {
+    prevSize = it.getSizeNew(prevSize);
+    it = it.getChild();
+  }
+  return prevSize;
 }
 
 Stmt
@@ -363,7 +383,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     body.push_back(lower(query));
     stmt = to<Multi>(stmt).getStmt2();
   }
-  std::cout << util::join(queryResults) << std::endl;
   
   // TODO: fix assumption that there is only one output
   const auto resultAccess = getResultAccesses(stmt).first.front();
@@ -377,7 +396,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     }
   }
 
-#if 1
   const auto resultTensor = resultAccess.getTensorVar();
   for (size_t i = 0; i < topResultIterators.size(); ++i) {
     this->topResultIterator = topResultIterators[i];
@@ -386,8 +404,21 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       this->nextTopResultIterator = topResultIterators[i+1];
     }
 
+    Expr prevSize = this->topResultIterator.isRoot() 
+                  ? 1 : getPrevSize(this->topResultIterator);
+
     if (!this->topResultIterator.isRoot()) {
       Iterator iter = this->topResultIterator.getParent();
+
+      std::vector<Expr> coords;
+      for (const auto it : resultIterators) {
+        if (it == this->topResultIterator) {
+          break;
+        }
+        coords.push_back(it.getCoordVar());
+      }
+      auto reverse = util::reverse(coords);
+      coords = std::vector<Expr>(reverse.begin(), reverse.end());
 
       bool isSeqIter = iter.isCompact();
       for (Iterator it = iter; isSeqIter && !it.isRoot(); it = it.getParent()) {
@@ -396,13 +427,12 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
       Stmt insertEdgeLoop;
       if (isSeqIter) {
-        insertEdgeLoop = this->topResultIterator.getSeqInsertEdge(iter.getPosVar(), 
-                                               coordinates(iter),
-                                               modeQueryResults.at(this->topResultIterator));
+        insertEdgeLoop = this->topResultIterator.getSeqInsertEdge(
+            iter.getPosVar(), coords,
+            modeQueryResults.at(this->topResultIterator));
       } else {
         taco_not_supported_yet;
       }
-      std::cout << insertEdgeLoop << std::endl;
 
       while (!iter.isRoot()) {
         if (iter.hasPosIter()) {
@@ -413,22 +443,46 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
           Expr dim = GetProperty::make(tensorVars.at(resultTensor),
                                        TensorProperty::Dimension, 
                                        iter.getMode().getLevel() - 1);
-          Expr coord = Var::make("i" + iter.getMode().getName(), Int());
-          insertEdgeLoop = For::make(coord, 0, dim, 1, insertEdgeLoop);
+          Expr pos = iter.getPosVar();
+          const auto locate = iter.locate(coords);
+          Stmt initPos = VarDecl::make(pos, locate[0]);
+          insertEdgeLoop = For::make(coords.back(), 0, dim, 1, 
+                                     Block::make(initPos, insertEdgeLoop));
         }
         iter = iter.getParent();
+        coords.pop_back();
       }
 
-      Stmt initEdges;
-      Stmt finalizeEdges;
-      body.push_back(Block::make(initEdges, insertEdgeLoop, finalizeEdges));
+      if (this->topResultIterator.hasSeqInsertEdge()) {
+        Stmt initEdges = this->topResultIterator.getSeqInitEdges(prevSize,
+            modeQueryResults.at(this->topResultIterator));
+        body.push_back(Block::make(initEdges, insertEdgeLoop));
+      } else {
+        taco_not_supported_yet;
+      }
+    }
+
+    for (Iterator it = this->topResultIterator; 
+         it != this->nextTopResultIterator; it = it.getChild()) {
+      if (it.isRoot()) {
+        continue;
+      }
+
+      body.push_back(it.getInitCoords(prevSize, modeQueryResults.at(it)));
+      body.push_back(it.getInitYieldPos(prevSize));
+      prevSize = it.getSizeNew(prevSize);
+
+      if (it.isLeaf()) {
+        break;
+      }
     }
 
     body.push_back(lower(stmt));
   }
-#else
-  body.push_back(lower(stmt));
-#endif
+
+  for (const auto& resultIterator : resultIterators) {
+    footer.push_back(resultIterator.getFinalizeLevel());
+  }
 
   // Post-process result modes and allocate memory for values if necessary
   Stmt finalizeResults = finalizeResultArrays(resultAccesses);
@@ -482,6 +536,7 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
       Expr values = getValuesArray(result);
       Expr loc = generateValueLocExpr(assignment.getLhs());
 
+      std::vector<Expr> coords;
       std::vector<Stmt> accessStmts;
 
       // TODO: emit this when only assembling as well
@@ -504,12 +559,13 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
         } else {
           ivar = getCoordinateVar(it.first.getIndexVar());
         }
+        coords.push_back(ivar);
 
-        const auto dim = result.getType().getShape().getDimension(i);
-        const auto stride = ir::Literal::make((int)dim.getSize());
-        Expr index = ir::Add::make(ir::Mul::make(prevPos, stride), ivar);
+        const auto yieldPos = it.first.getYieldPos(prevPos, coords);
+        accessStmts.push_back(yieldPos.compute());
         Expr pos = it.first.getPosVar();
-        accessStmts.push_back(VarDecl::make(pos, index));
+        accessStmts.push_back(VarDecl::make(pos, yieldPos[0]));
+        accessStmts.push_back(it.first.getInsertCoord(prevPos, pos, coords));
 
         prevPos = pos;
         ++i;

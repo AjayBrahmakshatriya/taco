@@ -220,7 +220,14 @@ Stmt CompressedModeFormat::getInitCoords(Expr prevSize,
 }
 
 Stmt CompressedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
-  return Stmt();
+  Expr ptrArr = getPtr(mode);
+  Expr posArr = getPosArray(mode.getModePack());
+  Stmt declPtr = VarDecl::make(ptrArr, 0);
+  Stmt allocPtr = Allocate::make(ptrArr, prevSize);
+  Expr pVar = Var::make("p", Int());
+  Stmt initPtr = For::make(pVar, 0, prevSize, 1, 
+                           Store::make(ptrArr, pVar, Load::make(posArr, pVar)));
+  return Block::make(declPtr, allocPtr, initPtr);
 }
 
 ModeFunction CompressedModeFormat::getYieldPos(Expr parentPos, 

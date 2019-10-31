@@ -77,7 +77,7 @@ Expr DenseModeFormat::getSizeNew(Expr prevSize, Mode mode) const {
 
 ModeFunction DenseModeFormat::getYieldPos(Expr parentPos, 
     std::vector<Expr> coords, Mode mode) const {
-  return ModeFunction();
+  return locate(parentPos, coords, mode);
 }
 
 vector<Expr> DenseModeFormat::getArrays(Expr tensor, int mode, 
