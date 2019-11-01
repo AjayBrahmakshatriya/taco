@@ -45,6 +45,18 @@ struct IndexVarLiteralNode : public IndexVarExprNode {
   size_t val;
 };
 
+struct IndexVarAddNode : public BinaryIndexVarExprNode {
+  IndexVarAddNode() : BinaryIndexVarExprNode() {}
+  IndexVarAddNode(IndexVarExpr a, IndexVarExpr b) : BinaryIndexVarExprNode(a, b) {}
+
+  std::string getOperatorString() const {
+    return "+";
+  }
+
+  void accept(IndexVarExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+};
 
 struct IndexVarSubNode : public BinaryIndexVarExprNode {
   IndexVarSubNode() : BinaryIndexVarExprNode() {}
@@ -59,7 +71,6 @@ struct IndexVarSubNode : public BinaryIndexVarExprNode {
   }
 };
 
-
 struct IndexVarDivNode : public BinaryIndexVarExprNode {
   IndexVarDivNode() : BinaryIndexVarExprNode() {}
   IndexVarDivNode(IndexVarExpr a, IndexVarExpr b) : BinaryIndexVarExprNode(a, b) {}
@@ -72,7 +83,6 @@ struct IndexVarDivNode : public BinaryIndexVarExprNode {
     v->visit(this);
   }
 };
-
 
 struct IndexVarCountNode : public IndexVarExprNode {
   IndexVarCountNode(const std::vector<IndexVar>& indexVars) : indexVars(indexVars) {}

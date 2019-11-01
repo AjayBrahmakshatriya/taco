@@ -37,6 +37,10 @@ void IndexVarExprPrinter::visitBinary(Node op, Precedence precedence) {
   }
 }
 
+void IndexVarExprPrinter::visit(const IndexVarAddNode* op) {
+  visitBinary(op, Precedence::ADD);
+}
+
 void IndexVarExprPrinter::visit(const IndexVarSubNode* op) {
   visitBinary(op, Precedence::SUB);
 }

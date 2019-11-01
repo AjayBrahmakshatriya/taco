@@ -21,6 +21,7 @@ class IndexVar;
 class IndexVarExpr;
 class IndexVarAccess;
 class IndexVarLiteral;
+class IndexVarAdd;
 class IndexVarSub;
 class IndexVarDiv;
 class IndexVarCount;
@@ -209,16 +210,19 @@ protected:
   virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarAccess(IndexVarAccess access);
   
   /// Lower an index variable literal expression.
-  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarLiteral(IndexVarLiteral access);
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarLiteral(IndexVarLiteral lit);
+
+  /// Lower an index variable addition expression.
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarAdd(IndexVarAdd add);
 
   /// Lower an index variable subtraction expression.
-  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarSub(IndexVarSub access);
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarSub(IndexVarSub sub);
 
   /// Lower an index variable division expression.
-  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarDiv(IndexVarDiv access);
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarDiv(IndexVarDiv div);
 
   /// Lower an index variable count expression.
-  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarCount(IndexVarCount access);
+  virtual std::pair<ir::Stmt,ir::Expr> lowerIndexVarCount(IndexVarCount count);
 
 
   /// Lower a concrete index notation statement.

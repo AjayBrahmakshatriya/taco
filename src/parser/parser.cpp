@@ -365,7 +365,8 @@ IndexVarExpr Parser::parseVarExpr() {
          content->currentToken == Token::sub) {
     switch (content->currentToken) {
       case Token::add:
-        taco_not_supported_yet;
+        consume(Token::add);
+        expr = expr + parseVarTerm();
         break;
       case Token::sub:
         consume(Token::sub);

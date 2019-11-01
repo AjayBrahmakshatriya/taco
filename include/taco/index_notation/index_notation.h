@@ -35,6 +35,7 @@ class Access;
 
 struct IndexVarAccessNode;
 struct IndexVarLiteralNode;
+struct IndexVarAddNode;
 struct IndexVarSubNode;
 struct IndexVarDivNode;
 struct IndexVarCountNode;
@@ -86,6 +87,12 @@ public:
 /// Compare two index expressions by value.
 bool equals(IndexVarExpr, IndexVarExpr);
 
+/// Adds an index var expression to another.
+/// ```
+/// A(i+j,i,j) 
+/// ```
+IndexVarExpr operator+(const IndexVarExpr&, const IndexVarExpr&);
+
 /// Subtract an index var expression from another.
 /// ```
 /// A(i-j,i,j) 
@@ -129,6 +136,23 @@ public:
   size_t getVal() const;
 
   typedef IndexVarLiteralNode Node;
+};
+
+
+/// An add expression adds two index var expressions.
+/// ```
+/// A(i+j,i,j) = B(i,j)
+/// ```
+class IndexVarAdd : public IndexVarExpr {
+public:
+  IndexVarAdd();
+  IndexVarAdd(const IndexVarAddNode*);
+  IndexVarAdd(IndexVarExpr a, IndexVarExpr b);
+
+  IndexVarExpr getA() const;
+  IndexVarExpr getB() const;
+
+  typedef IndexVarAddNode Node;
 };
 
 

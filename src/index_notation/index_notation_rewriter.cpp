@@ -72,6 +72,10 @@ IndexVarExpr visitBinaryOp(const T *op, IndexVarExprRewriter *rw) {
   }
 }
 
+void IndexVarExprRewriter::visit(const IndexVarAddNode* op) {
+  expr = visitBinaryOp(op, this);
+}
+
 void IndexVarExprRewriter::visit(const IndexVarSubNode* op) {
   expr = visitBinaryOp(op, this);
 }

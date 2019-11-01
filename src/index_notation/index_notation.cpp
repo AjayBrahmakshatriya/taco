@@ -102,6 +102,10 @@ struct IndexVarEquals : public IndexVarExprVisitorStrict {
     return true;
   }
 
+  void visit(const IndexVarAddNode* anode) {
+    eq = binaryEquals(anode, bExpr);
+  }
+
   void visit(const IndexVarSubNode* anode) {
     eq = binaryEquals(anode, bExpr);
   }
@@ -132,6 +136,10 @@ bool equals(IndexVarExpr a, IndexVarExpr b) {
     return false;
   }
   return IndexVarEquals().check(a,b);
+}
+
+IndexVarExpr operator+(const IndexVarExpr& lhs, const IndexVarExpr& rhs) {
+  return new IndexVarAddNode(lhs, rhs);
 }
 
 IndexVarExpr operator-(const IndexVarExpr& lhs, const IndexVarExpr& rhs) {
@@ -184,6 +192,34 @@ template <> bool isa<IndexVarLiteral>(IndexVarExpr s) {
 template <> IndexVarLiteral to<IndexVarLiteral>(IndexVarExpr s) {
   taco_iassert(isa<IndexVarLiteral>(s));
   return IndexVarLiteral(to<IndexVarLiteralNode>(s.ptr));
+}
+
+
+// class IndexVarAdd
+IndexVarAdd::IndexVarAdd() : IndexVarAdd(new IndexVarAddNode) {
+}
+
+IndexVarAdd::IndexVarAdd(const IndexVarAddNode* n) : IndexVarExpr(n) {
+}
+
+IndexVarAdd::IndexVarAdd(IndexVarExpr a, IndexVarExpr b) : IndexVarAdd(new IndexVarAddNode(a, b)) {
+}
+
+IndexVarExpr IndexVarAdd::getA() const {
+  return getNode(*this)->a;
+}
+
+IndexVarExpr IndexVarAdd::getB() const {
+  return getNode(*this)->b;
+}
+
+template <> bool isa<IndexVarAdd>(IndexVarExpr e) {
+  return isa<IndexVarAddNode>(e.ptr);
+}
+
+template <> IndexVarAdd to<IndexVarAdd>(IndexVarExpr e) {
+  taco_iassert(isa<IndexVarAdd>(e));
+  return IndexVarAdd(to<IndexVarAddNode>(e.ptr));
 }
 
 
@@ -2776,7 +2812,17 @@ private:
   }
 
   void visit(const MapNode* op) {
-    taco_not_supported_yet;
+    IndexExpr in = rewrite(op->in);
+    IndexExpr out = rewrite(op->out);
+    if (!in.defined()) {
+      expr = IndexExpr();
+    }
+    else if (out == op->out) {
+      expr = op;
+    }
+    else {
+      expr = new MapNode(in, out);
+    }
   }
 
   void visit(const CallIntrinsicNode* op) {

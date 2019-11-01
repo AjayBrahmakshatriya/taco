@@ -83,6 +83,7 @@ private:
   using IndexVarExprVisitorStrict::visit;
   void visit(const IndexVarAccessNode* node)  { expr = impl->lowerIndexVarAccess(node); }
   void visit(const IndexVarLiteralNode* node) { expr = impl->lowerIndexVarLiteral(node); }
+  void visit(const IndexVarAddNode* node)     { expr = impl->lowerIndexVarAdd(node); }
   void visit(const IndexVarSubNode* node)     { expr = impl->lowerIndexVarSub(node); }
   void visit(const IndexVarDivNode* node)     { expr = impl->lowerIndexVarDiv(node); }
   void visit(const IndexVarCountNode* node)   { expr = impl->lowerIndexVarCount(node); }
@@ -773,7 +774,7 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
     ModeFunction bounds = iterator.posBounds(parentPos);
     boundsCompute = bounds.compute();
     startBound = bounds[0];
-    endBound = bounds[1];
+    endBound = iterator.isBranchless() ? Expr() : bounds[1];
   } else {
     taco_iassert(iterator.isOrdered() && iterator.getParent().isOrdered());
     taco_iassert(iterator.isCompact() && iterator.getParent().isCompact());
@@ -787,13 +788,15 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
     endBound = endBounds[1];
   }
   bool parallelize = forall.getTags().count(Forall::PARALLELIZE);
+  Stmt loop = endBound.defined()
+            ? For::make(iterator.getPosVar(), startBound, endBound, 1,
+                        Block::make(declareCoordinate, body),
+                        parallelize ? LoopKind::Runtime : LoopKind::Serial, 
+                        parallelize)
+            : Block::make(VarDecl::make(iterator.getPosVar(), startBound),
+                          declareCoordinate, body);
   // Loop with preamble and postamble
-  return Block::blanks(boundsCompute,
-                       For::make(iterator.getPosVar(), startBound, endBound, 1,
-                                 Block::make(declareCoordinate, body),
-                                 parallelize ? LoopKind::Runtime : LoopKind::Serial, parallelize),
-                       posAppend);
-
+  return Block::blanks(boundsCompute, loop, posAppend);
 }
 
 Stmt LowererImpl::lowerMergeLattice(MergeLattice lattice, Expr coordinate,
@@ -1164,6 +1167,14 @@ std::pair<Stmt,Expr> LowererImpl::lowerIndexVarAccess(IndexVarAccess access) {
 
 std::pair<Stmt,Expr> LowererImpl::lowerIndexVarLiteral(IndexVarLiteral lit) {
   return std::make_pair(Stmt(), ir::Literal::make((int)lit.getVal()));
+}
+
+
+std::pair<Stmt,Expr> LowererImpl::lowerIndexVarAdd(IndexVarAdd sub) {
+  const auto a = lower(sub.getA());
+  const auto b = lower(sub.getB());
+  const auto body = Block::make({a.first, b.first});
+  return std::make_pair(body, ir::Add::make(a.second, b.second));
 }
 
 

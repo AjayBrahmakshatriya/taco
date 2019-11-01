@@ -24,6 +24,10 @@ void IndexVarExprVisitor::visit(const IndexVarAccessNode* op) {
 void IndexVarExprVisitor::visit(const IndexVarLiteralNode* op) {
 }
 
+void IndexVarExprVisitor::visit(const IndexVarAddNode* op) {
+  visit(static_cast<const BinaryIndexVarExprNode*>(op));
+}
+
 void IndexVarExprVisitor::visit(const IndexVarSubNode* op) {
   visit(static_cast<const BinaryIndexVarExprNode*>(op));
 }

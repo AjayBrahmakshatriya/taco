@@ -14,6 +14,7 @@ class TensorVar;
 
 struct IndexVarAccessNode;
 struct IndexVarLiteralNode;
+struct IndexVarAddNode;
 struct IndexVarSubNode;
 struct IndexVarDivNode;
 struct IndexVarCountNode;
@@ -54,6 +55,7 @@ public:
 
   virtual void visit(const IndexVarAccessNode*) = 0;
   virtual void visit(const IndexVarLiteralNode*) = 0;
+  virtual void visit(const IndexVarAddNode*) = 0;
   virtual void visit(const IndexVarSubNode*) = 0;
   virtual void visit(const IndexVarDivNode*) = 0;
   virtual void visit(const IndexVarCountNode*) = 0;
@@ -69,6 +71,7 @@ public:
   // Index Expressions
   virtual void visit(const IndexVarAccessNode* node);
   virtual void visit(const IndexVarLiteralNode* node);
+  virtual void visit(const IndexVarAddNode* node);
   virtual void visit(const IndexVarSubNode* node);
   virtual void visit(const IndexVarDivNode* node);
   virtual void visit(const IndexVarCountNode* node);

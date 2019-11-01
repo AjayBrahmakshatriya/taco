@@ -16,6 +16,7 @@ public:
 
   void visit(const IndexVarAccessNode*);
   void visit(const IndexVarLiteralNode*);
+  void visit(const IndexVarAddNode*);
   void visit(const IndexVarSubNode*);
   void visit(const IndexVarDivNode*);
   void visit(const IndexVarCountNode*);
