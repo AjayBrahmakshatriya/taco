@@ -45,6 +45,12 @@ struct TensorStorage::Content {
         modeTypes[i] = taco_mode_sparse;
       } else if (modeType.getName() == Singleton.getName()) {
         modeTypes[i] = taco_mode_sparse;
+      } else if (modeType.getName() == Squeezed.getName()) {
+        // TODO: fix this
+        modeTypes[i] = taco_mode_sparse;
+      } else if (modeType.getName() == Offset.getName()) {
+        // TODO: fix this
+        modeTypes[i] = taco_mode_sparse;
       } else {
         taco_not_supported_yet;
       }

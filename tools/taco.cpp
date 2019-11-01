@@ -293,6 +293,12 @@ int main(int argc, char* argv[]) {
           case 'q':
             modeTypes.push_back(ModeFormat::Singleton);
             break;
+          case 'e':
+            modeTypes.push_back(ModeFormat::Squeezed);
+            break;
+          case 'o':
+            modeTypes.push_back(ModeFormat::Offset);
+            break;
           default:
             return reportError("Incorrect format descriptor", 3);
             break;

@@ -523,6 +523,8 @@ void IRPrinter::visit(const Allocate* op) {
   doIndent();
   if (op->is_realloc)
     stream << "reallocate ";
+  else if (op->zero_init)
+    stream << "zero_allocate ";
   else
     stream << "allocate ";
   op->var.accept(this);

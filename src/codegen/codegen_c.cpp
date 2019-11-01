@@ -398,17 +398,25 @@ void CodeGen_C::visit(const Allocate* op) {
   stream << " = (";
   stream << elementType << "*";
   stream << ")";
-  if (op->is_realloc) {
-    stream << "realloc(";
-    op->var.accept(this);
-    stream << ", ";
+  if (op->zero_init) {
+    stream << "calloc(";
+    op->num_elements.accept(this);
+    stream << ", sizeof(";
+    stream << elementType;
+    stream << ")";
+  } else {
+    if (op->is_realloc) {
+      stream << "realloc(";
+      op->var.accept(this);
+      stream << ", ";
+    }
+    else {
+      stream << "malloc(";
+    }
+    stream << "sizeof(" << elementType << ")";
+    stream << " * ";
+    op->num_elements.accept(this);
   }
-  else {
-    stream << "malloc(";
-  }
-  stream << "sizeof(" << elementType << ")";
-  stream << " * ";
-  op->num_elements.accept(this);
   stream << ");";
     stream << endl;
 }

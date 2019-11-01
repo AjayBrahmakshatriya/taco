@@ -354,6 +354,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // Allocate and initialize append and insert mode indices
   Stmt initializeResults = initResultArrays(resultAccesses, inputAccesses, 
                                             reducedAccesses);
+  std::cout << "initialize: " << initializeResults << std::endl;
 
   // Allocate and free counter arrays
   std::vector<Stmt> allocCounterStmts;
@@ -486,6 +487,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
   // Post-process result modes and allocate memory for values if necessary
   Stmt finalizeResults = finalizeResultArrays(resultAccesses);
+  std::cout << "finalize: " << finalizeResults << std::endl;
 
   // Store scalar stack variables back to results
   if (generateComputeCode()) {
@@ -1410,7 +1412,12 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
         Expr allocSize = isValue(parentSize, 0) 
                          ? DEFAULT_ALLOC_SIZE : parentSize;
         initArrays.push_back(VarDecl::make(capacityVar, allocSize));
-        initArrays.push_back(Allocate::make(valuesArr, capacityVar));
+        // TODO: check for compactness and no zero-padding instead
+        if (!iterators.back().hasInitYieldPos() && !isValue(parentSize, 0)) {
+          initArrays.push_back(Allocate::make(valuesArr, capacityVar, false, Expr(), true));
+        } else {
+          initArrays.push_back(Allocate::make(valuesArr, capacityVar));
+        }
       }
 
       taco_iassert(!initArrays.empty());
@@ -1437,15 +1444,15 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
       }
     }
 
-    if (generateComputeCode() && !iterators.back().hasAppend() && 
-        !isValue(parentSize, 0) && 
-        (hasSparseInserts(iterators, readIterators) || 
-         util::contains(reducedAccesses, write))) {
-      // Zero-initialize values array if size statically known and might not 
-      // assign to every element in values array during compute
-      Expr size = generateAssembleCode() ? getCapacityVar(tensor) : parentSize;
-      result.push_back(zeroInitValues(tensor, 0, size));
-    }
+    //if (generateComputeCode() && !iterators.back().hasAppend() && 
+    //    !isValue(parentSize, 0) && 
+    //    (hasSparseInserts(iterators, readIterators) || 
+    //     util::contains(reducedAccesses, write))) {
+    //  // Zero-initialize values array if size statically known and might not 
+    //  // assign to every element in values array during compute
+    //  Expr size = generateAssembleCode() ? getCapacityVar(tensor) : parentSize;
+    //  result.push_back(zeroInitValues(tensor, 0, size));
+    //}
   }
   return result.empty() ? Stmt() : Block::blanks(result);
 }
@@ -1519,6 +1526,7 @@ vector<Iterator> getIteratorsFrom(IndexVar var,
 Stmt LowererImpl::initResultArrays(IndexVar var, vector<Access> writes, 
                                    vector<Access> reads,
                                    set<Access> reducedAccesses) {
+  return Stmt();
   if (!generateAssembleCode()) {
     return Stmt();
   }
@@ -1549,7 +1557,6 @@ Stmt LowererImpl::initResultArrays(IndexVar var, vector<Access> writes,
       result.push_back(VarDecl::make(begin, resultIterator.getPosVar()));
     }
 
-    continue;
     const bool isTopLevel = (iterators.size() == write.getIndices().size());
     if (resultIterator.getParent().hasAppend() || isTopLevel) {
       Expr resultParentPos = resultIterator.getParent().getPosVar();

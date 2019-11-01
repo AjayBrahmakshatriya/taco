@@ -56,14 +56,10 @@ ModeFormat CompressedModeFormat::copy(
 
 std::vector<attr_query::AttrQuery>
 CompressedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
-#if 1
   std::vector<IndexVarExpr> groupBys(coords.begin(), coords.end() - 1);
   const auto countQuery = attr_query::Select(groupBys, 
       std::make_pair(attr_query::DistinctCount(coords.back()), "nnz"));
   return {countQuery};
-#else
-  return {attr_query::Select({coords.back()}, std::make_pair(attr_query::Literal(1), "nonempty"))};
-#endif
 }
 
 ModeFunction CompressedModeFormat::posIterBounds(Expr parentPos, 
