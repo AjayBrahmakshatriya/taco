@@ -55,8 +55,8 @@ std::ostream& operator<<(std::ostream& os, const ModeFunction& modeFunction) {
 
 
 // class AttrQueryResult
-AttrQueryResult::AttrQueryResult(TensorVar resultVar, Expr resultVarExpr) 
-    : resultVar(resultVar), resultVarExpr(resultVarExpr) {}
+AttrQueryResult::AttrQueryResult(TensorVar resultVar, Expr resultVarExpr, Expr resultValues) 
+    : resultVar(resultVar), resultVarExpr(resultVarExpr), resultValues(resultValues) {}
 
 std::string AttrQueryResult::getName() const {
   return resultVar.getName();
@@ -69,8 +69,7 @@ Expr AttrQueryResult::getResult(const std::vector<Expr>& indices,
     Expr dim = GetProperty::make(resultVarExpr, TensorProperty::Dimension, i);
     pos = ir::Add::make(ir::Mul::make(pos, dim), indices[i]);
   }
-  Expr resultArray = GetProperty::make(resultVarExpr, TensorProperty::Values);
-  return Load::make(resultArray, pos);
+  return Load::make(resultValues, pos);
 }
 
 std::ostream& operator<<(std::ostream& os, const AttrQueryResult& result) {

@@ -644,8 +644,9 @@ int main(int argc, char* argv[]) {
   taco_set_parallel_schedule(sched, chunkSize);
   taco_set_num_threads(nthreads);
 
-  IndexStmt stmt =
-      makeConcreteNotation(makeReductionNotation(tensor.getAssignment()));
+  IndexStmt stmt = tensor.getAssignment();
+  stmt = makeReductionNotation(stmt);
+  stmt = makeConcreteNotation(stmt);
   stmt = reorderLoopsTopologically(stmt);
   stmt = insertTemporaries(stmt);
   stmt = insertAttributeQueries(stmt);

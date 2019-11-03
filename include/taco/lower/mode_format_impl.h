@@ -58,7 +58,7 @@ class AttrQueryResult {
 public:
   AttrQueryResult() = default;
 
-  AttrQueryResult(TensorVar resultVar, ir::Expr resultVarExpr);
+  AttrQueryResult(TensorVar resultVar, ir::Expr resultVarExpr, ir::Expr resultValues);
 
   std::string getName() const;
 
@@ -68,6 +68,7 @@ public:
 private:
   TensorVar resultVar;
   ir::Expr  resultVarExpr;
+  ir::Expr  resultValues;
 };
 
 std::ostream& operator<<(std::ostream&, const AttrQueryResult&);

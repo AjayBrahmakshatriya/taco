@@ -59,6 +59,7 @@ Stmt SqueezedModeFormat::getInitCoords(Expr prevSize,
   Expr permArray = getPermArray(mode.getModePack());
   Expr permSizeArray = getPermSizeArray(mode.getModePack());
   Stmt allocPerm = Allocate::make(permArray, getSizeArray(mode.getModePack()));
+  Stmt allocPermSize = Allocate::make(permSizeArray, 1);
   Stmt initPermSize = Store::make(permSizeArray, 0, 0);
   Expr idx = Var::make("i", Int());
   Expr loadPermSize = Load::make(permSizeArray, 0);
@@ -67,7 +68,7 @@ Stmt SqueezedModeFormat::getInitCoords(Expr prevSize,
   Expr isNonempty = Eq::make(queries["nonempty"].getResult({idx}, "nonempty"), 1);
   Stmt maybeStorePerm = IfThenElse::make(isNonempty, Block::make(storePerm, incPermSize));
   Stmt storePerms = For::make(idx, 0, getSizeArray(mode.getModePack()), 1, maybeStorePerm);
-  return Block::make(allocPerm, initPermSize, storePerms);
+  return Block::make(allocPerm, allocPermSize, initPermSize, storePerms);
 }
 
 Stmt SqueezedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {

@@ -2158,9 +2158,8 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       }
 
       for (const auto& attr : node->attrs) {
-        TensorVar queryResult(modeName + attr.second, Type(Int(), dims));
-
         attr.first.accept(this);
+        TensorVar queryResult(modeName + attr.second, Type(resultType, dims));
         IndexExpr val = Map(to<Access>(assign.getRhs()), ifValue);
         if (tmpResult.defined()) {
           aggr = Assignment(to<Access>(tmpResult), val, reduceOp);
@@ -2184,10 +2183,11 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     }
 
     void visit(const attr_query::LiteralNode* node) {
-      ifValue = 1;
-      elseValue = 0;
-      reduceOp = IndexExpr();
+      ifValue = true;
+      elseValue = false;
+      reduceOp = Add();
       tmpResult = Access();
+      resultType = Bool;
     }
 
     void visit(const attr_query::DistinctCountNode* node) {
@@ -2199,6 +2199,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       std::vector<IndexVarExpr> indices = groupBys;
       indices.push_back(node->coord);
       tmpResult = Access(tmp, indices);
+      resultType = Int();
     }
 
   private:
@@ -2210,6 +2211,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     IndexExpr elseValue;
     IndexExpr reduceOp;
     IndexExpr tmpResult;
+    Datatype resultType;
     std::string modeName;
   };
   
@@ -2243,11 +2245,12 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       const auto resultTensor = resultAccess.getTensorVar();
       const auto indices = resultAccess.getIndices();
       const auto modeFormats = resultTensor.getFormat().getModeFormats();
+      const auto modeOrdering = resultTensor.getFormat().getModeOrdering();
 
       IndexStmt aggrs;
       std::vector<IndexVarExpr> sliceIndices;
       for (size_t i = 0; i < indices.size(); ++i) {
-        const auto index = indices[i];  // TODO: check permutation
+        const auto index = indices[modeOrdering[i]];  // TODO: check permutation
         const auto modeName = resultTensor.getName() + std::to_string(i + 1);
         sliceIndices.push_back(index);
 
@@ -2437,7 +2440,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
   };
   queries = EliminateRedundantAggr().rewrite(queries, &inlinedResults);
 
-  return queries.defined() ? Multi(queries, stmt) : stmt;
+  return queries.defined() ? Where(stmt, queries) : stmt;
 }
 
 

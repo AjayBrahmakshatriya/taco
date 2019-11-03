@@ -6,6 +6,7 @@
 #include "taco/ir/ir.h"
 #include "ir/ir_generators.h"
 #include "taco/ir/ir_visitor.h"
+#include "taco/ir/ir_rewriter.h"
 #include "taco/ir/simplify.h"
 #include "taco/lower/iterator.h"
 #include "taco/lower/merge_lattice.h"
@@ -219,9 +220,15 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // Create variables for temporaries
   // TODO Remove this
   for (auto& temp : temporaries) {
+    std::cout << "tmp: " << temp << std::endl;
     ir::Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(),
                                    true, true);
     tensorVars.insert({temp, irVar});
+    resultVars.insert({temp, irVar});
+    TemporaryArrays arrays;
+    arrays.values = ir::Var::make(temp.getName(), temp.getType().getDataType(), true);
+    this->temporaryArrays.insert({temp, arrays});
+    header.push_back(VarDecl::make(arrays.values, 0));
   }
 
   // Create variables for keeping track of result values array capacity
@@ -274,6 +281,43 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     );
     taco_iassert(dimension.defined());
     dimensions.insert({indexVar, dimension});
+  }
+
+  std::map<IndexVarExpr,std::pair<Expr,size_t>> resultDims;
+  std::map<std::pair<Expr,size_t>,std::pair<Expr,size_t>> queryDims;
+  match(stmt,
+    function<void(const AssignmentNode*, Matcher*)>([&](
+        const AssignmentNode* n, Matcher* m) {
+      const auto p = n->lhs.getTensorVar().getName().find("_attr_");
+      if (p == std::string::npos) {
+        for (size_t i = 0; i < n->lhs.getIndices().size(); ++i) {
+          resultDims[n->lhs.getIndices()[i]] = 
+              std::make_pair(tensorVars.at(n->lhs.getTensorVar()), i);
+        }
+        std::cout << "here2" << IndexStmt(n) << std::endl;
+      }
+    })
+  );
+  match(stmt,
+    function<void(const AssignmentNode*, Matcher*)>([&](
+        const AssignmentNode* n, Matcher* m) {
+      const auto p = n->lhs.getTensorVar().getName().find("_attr_");
+      if (p != std::string::npos) {
+        for (size_t i = 0; i < n->lhs.getIndices().size(); ++i) {
+          for (const auto resultDim : resultDims) {
+            std::cout << resultDim.first << " " << n->lhs.getIndices()[i] << std::endl;
+            if (equals(resultDim.first, n->lhs.getIndices()[i])) {
+              std::cout << "here3" << std::endl;
+              queryDims[std::make_pair(tensorVars.at(n->lhs.getTensorVar()), i)] = resultDim.second;
+              break;
+            }
+          }
+        }
+      }
+    })
+  );
+  for (const auto it : queryDims) {
+    std::cout << it.first.first << " " << it.first.second << " " << it.second.first << " " << it.second.second << std::endl;
   }
 
   struct GenerateCounters : public IndexVarExprVisitor {
@@ -352,11 +396,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     }
   }
 
-  // Allocate and initialize append and insert mode indices
-  Stmt initializeResults = initResultArrays(resultAccesses, inputAccesses, 
-                                            reducedAccesses);
-  std::cout << "initialize: " << initializeResults << std::endl;
-
   // Allocate and free counter arrays
   std::vector<Stmt> allocCounterStmts;
   std::vector<Stmt> freeCounterStmts;
@@ -373,17 +412,21 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   Stmt freeCounters = Block::make(freeCounterStmts);
 
   // Lower the index statement to compute and/or assemble
-  // TODO: handle mutli-statements without attribute queries
+  // TODO: handle where statements without attribute queries
   std::vector<Stmt> body;
   std::map<std::string,AttrQueryResult> queryResults;
-  while (isa<Multi>(stmt)) {
-    IndexStmt query = to<Multi>(stmt).getStmt1();
+  while (isa<Where>(stmt)) {
+    IndexStmt query = to<Where>(stmt).getProducer();
     for (const auto& queryAccess : getResultAccesses(query).first) {
       const auto queryVar = queryAccess.getTensorVar();
-      queryResults[queryVar.getName()] = AttrQueryResult(queryVar, getTensorVar(queryVar));
+      queryResults[queryVar.getName()] = AttrQueryResult(queryVar, getTensorVar(queryVar), getValuesArray(queryVar));
+      Stmt initializeResults = initResultArrays({queryAccess}, inputAccesses, 
+                                              reducedAccesses);
+      std::cout << "initResults: " << initializeResults << std::endl;
+      body.push_back(initializeResults);
     }
     body.push_back(lower(query));
-    stmt = to<Multi>(stmt).getStmt2();
+    stmt = to<Where>(stmt).getConsumer();
   }
   
   // TODO: fix assumption that there is only one output
@@ -444,7 +487,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         } else {
           Expr dim = GetProperty::make(tensorVars.at(resultTensor),
                                        TensorProperty::Dimension, 
-                                       iter.getMode().getLevel() - 1);
+                                       resultTensor.getFormat().getModeOrdering()[iter.getMode().getLevel() - 1]);
           Expr pos = iter.getPosVar();
           const auto locate = iter.locate(coords);
           Stmt initPos = VarDecl::make(pos, locate[0]);
@@ -475,6 +518,11 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       prevSize = it.getSizeNew(prevSize);
 
       if (it.isLeaf()) {
+        // Allocate and initialize append and insert mode indices
+        Stmt initializeResults = initResultArrays(resultAccesses, inputAccesses, 
+                                                  reducedAccesses);
+        body.push_back(initializeResults);
+        std::cout << "initialize: " << initializeResults << std::endl;
         break;
       }
     }
@@ -505,14 +553,40 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   }
 
   // Create function
-  return Function::make(name, resultsIR, argumentsIR,
-                        Block::blanks(Block::make(header),
-                                      allocCounters,
-                                      initializeResults,
-                                      Block::make(body),
-                                      finalizeResults,
-                                      freeCounters,
-                                      Block::make(footer)));
+  Stmt func = Function::make(name, resultsIR, argumentsIR,
+                             Block::blanks(Block::make(header),
+                                           allocCounters,
+                                           Block::make(body),
+                                           finalizeResults,
+                                           freeCounters,
+                                           Block::make(footer)));
+
+            //modeQueryResults.at(this->topResultIterator));
+  struct ReplaceDimensionVars : public IRRewriter {
+    using IRRewriter::visit;
+
+    ReplaceDimensionVars(const std::map<std::pair<Expr,size_t>,std::pair<Expr,size_t>>& queryDims) : 
+        queryDims(queryDims) {}
+
+    void visit(const GetProperty* op) {
+      if (op->property == TensorProperty::Dimension) {
+        const auto p = op->name.find("_attr_");
+        if (p != std::string::npos) {
+          const auto equivalentDim = queryDims.at(std::make_pair(op->tensor, (size_t)op->mode));
+          std::cout << "here " << Expr(op) << equivalentDim.first << std::endl;
+          expr = GetProperty::make(equivalentDim.first, TensorProperty::Dimension, equivalentDim.second);
+          return;
+        }
+      }
+      expr = op;
+    }
+
+    const std::map<std::pair<Expr,size_t>,std::pair<Expr,size_t>>& queryDims;
+  };
+  func = ReplaceDimensionVars(queryDims).rewrite(func);
+  std::cout << func << std::endl;
+
+  return func;
 }
 
 
@@ -575,7 +649,8 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
       }
 
       if (!this->nextTopResultIterator.defined()) {
-        if (!assignment.getOperator().defined()) {
+        if (!assignment.getOperator().defined() || (values.type() == Bool && 
+            isa<ir::Literal>(rhs) && !to<ir::Literal>(rhs)->equalsScalar(0))) {
           accessStmts.push_back(Store::make(values, loc, rhs));
         }
         else {
@@ -583,6 +658,7 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
         }
       }
 
+      //return IfThenElse::make(Neq::make(rhs, 0.0), Block::make(accessStmts));
       return Block::make(accessStmts);
     }
   }
@@ -1147,7 +1223,13 @@ Expr LowererImpl::lowerCast(Cast cast) {
 
 
 Expr LowererImpl::lowerMap(Map map) {
-  return lower(map.getOut());
+  Expr out = lower(map.getOut());
+  if (true) {  // TODO: check if in-expr can be zero
+    return out;
+  }
+  Expr in = lower(map.getIn());
+  Expr cmp = ir::Cast::make(Neq::make(in, 0.0), Int());
+  return simplify(ir::Mul::make(cmp, out));
 }
 
 
@@ -1377,6 +1459,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
 
   std::vector<Stmt> result;
   for (auto& write : writes) {
+    std::cout << "write: " << write << std::endl;
     if (write.getTensorVar().getOrder() == 0) continue;
 
     std::vector<Stmt> initArrays;
@@ -1385,7 +1468,8 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
     taco_iassert(!iterators.empty());
 
     Expr tensor = getTensorVar(write.getTensorVar());
-    Expr valuesArr = GetProperty::make(tensor, TensorProperty::Values);
+    Expr valuesArr = getValuesArray(write.getTensorVar());
+    //Expr valuesArr = GetProperty::make(tensor, TensorProperty::Values);
 
     Expr parentSize = 1;
     if (generateAssembleCode()) {
