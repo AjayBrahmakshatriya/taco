@@ -63,12 +63,15 @@ Stmt SqueezedModeFormat::getInitCoords(Expr prevSize,
   Stmt initPermSize = Store::make(permSizeArray, 0, 0);
   Expr idx = Var::make("i", Int());
   Expr loadPermSize = Load::make(permSizeArray, 0);
-  Stmt storePerm = Store::make(permArray, loadPermSize, idx);
+  Expr shift = Load::make(getShiftArray(mode.getModePack()), 0);
+  Expr shiftVar = Var::make("shift", Int());
+  Stmt initShift = VarDecl::make(shiftVar, shift);
+  Stmt storePerm = Store::make(permArray, loadPermSize, ir::Sub::make(idx, shiftVar));
   Stmt incPermSize = Store::make(permSizeArray, 0, ir::Add::make(loadPermSize, 1));
   Expr isNonempty = Eq::make(queries["nonempty"].getResult({idx}, "nonempty"), 1);
   Stmt maybeStorePerm = IfThenElse::make(isNonempty, Block::make(storePerm, incPermSize));
   Stmt storePerms = For::make(idx, 0, getSizeArray(mode.getModePack()), 1, maybeStorePerm);
-  return Block::make(allocPerm, allocPermSize, initPermSize, storePerms);
+  return Block::make(allocPerm, allocPermSize, initPermSize, initShift, storePerms);
 }
 
 Stmt SqueezedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
@@ -87,12 +90,13 @@ Stmt SqueezedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
 
 ModeFunction SqueezedModeFormat::getYieldPos(Expr parentPos, 
     std::vector<Expr> coords, Mode mode) const {
+  Expr shift = Load::make(getShiftArray(mode.getModePack()), 0);
   const auto pos = ir::Add::make(ir::Mul::make(parentPos, getLocalPermSize(mode)),
-                                 Load::make(getRperm(mode), coords.back()));
+                                 Load::make(getRperm(mode), ir::Add::make(coords.back(), shift)));
   return ModeFunction(Stmt(), {pos});
 }
 
-Stmt SqueezedModeFormat::getFinalizeLevel(Mode mode) const {
+Stmt SqueezedModeFormat::getFinalizeLevel(Expr prevSize, Mode mode) const {
   return Free::make(getRperm(mode));
 }
 
@@ -103,6 +107,8 @@ std::vector<Expr> SqueezedModeFormat::getArrays(Expr tensor, int mode,
                             level - 1, 0, arraysPrefix + "_perm"),
           GetProperty::make(tensor, TensorProperty::Indices,
                             level - 1, 1, arraysPrefix + "_nzslice"),
+          GetProperty::make(tensor, TensorProperty::Indices,
+                            level - 1, 2, arraysPrefix + "_shift"),
           GetProperty::make(tensor, TensorProperty::Dimension, mode)};
 }
 
@@ -114,8 +120,12 @@ Expr SqueezedModeFormat::getPermSizeArray(ModePack pack) const {
   return pack.getArray(1);
 }
 
-Expr SqueezedModeFormat::getSizeArray(ModePack pack) const {
+Expr SqueezedModeFormat::getShiftArray(ModePack pack) const {
   return pack.getArray(2);
+}
+
+Expr SqueezedModeFormat::getSizeArray(ModePack pack) const {
+  return pack.getArray(3);
 }
 
 Expr SqueezedModeFormat::getRperm(Mode mode) const {
@@ -132,6 +142,18 @@ Expr SqueezedModeFormat::getRperm(Mode mode) const {
 
 Expr SqueezedModeFormat::getLocalPermSize(Mode mode) const {
   const std::string varName = mode.getName() + "_nzslice_local";
+  
+  if (!mode.hasVar(varName)) {
+    Expr ptr = Var::make(varName, Int());
+    mode.addVar(varName, ptr);
+    return ptr;
+  }
+
+  return mode.getVar(varName);
+}
+
+Expr SqueezedModeFormat::getLocalShift(Mode mode) const {
+  const std::string varName = mode.getName() + "_shift_local";
   
   if (!mode.hasVar(varName)) {
     Expr ptr = Var::make(varName, Int());

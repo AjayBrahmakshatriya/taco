@@ -214,7 +214,7 @@ Stmt ModeFormatImpl::getInsertCoord(Expr parentPos, Expr pos,
   return Stmt();
 }
 
-Stmt ModeFormatImpl::getFinalizeLevel(Mode mode) const {
+Stmt ModeFormatImpl::getFinalizeLevel(Expr prevSize, Mode mode) const {
   return Stmt();
 }
 

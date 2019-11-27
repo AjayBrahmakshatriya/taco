@@ -25,7 +25,7 @@ public:
   virtual ModeFunction getYieldPos(ir::Expr parentPos, 
                                    std::vector<ir::Expr> coords, 
                                    Mode mode) const;
-  virtual ir::Stmt getFinalizeLevel(Mode mode) const;
+  virtual ir::Stmt getFinalizeLevel(ir::Expr prevSize, Mode mode) const;
 
   virtual std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode, 
                                           int level) const;
@@ -33,10 +33,12 @@ public:
 protected:
   ir::Expr getPermArray(ModePack pack) const;
   ir::Expr getPermSizeArray(ModePack pack) const;
+  ir::Expr getShiftArray(ModePack pack) const;
   ir::Expr getSizeArray(ModePack pack) const;
 
   ir::Expr getRperm(Mode mode) const;
   ir::Expr getLocalPermSize(Mode mode) const;  // TODO: conversion to local should be handled by lowering machinery
+  ir::Expr getLocalShift(Mode mode) const;  // TODO: conversion to local should be handled by lowering machinery
 };
 
 }

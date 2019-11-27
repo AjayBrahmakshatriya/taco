@@ -170,7 +170,7 @@ public:
       const std::vector<ir::Expr>& coords) const;
   ir::Stmt getInsertCoord(const ir::Expr& parentPos, const ir::Expr& pos, 
       const std::vector<ir::Expr>& coords) const;
-  ir::Stmt getFinalizeLevel() const;
+  ir::Stmt getFinalizeLevel(const ir::Expr& prevSize) const;
 
   /// Returns true if the iterator is defined, false otherwise.
   bool defined() const;

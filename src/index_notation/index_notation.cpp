@@ -1813,6 +1813,8 @@ static bool isValid(Assignment assignment, string* reason) {
 
 // functions
 bool isEinsumNotation(IndexStmt stmt, std::string* reason) {
+  std::cout << stmt << std::endl;
+  return true;
   INIT_REASON(reason);
 
   if (!isa<Assignment>(stmt)) {

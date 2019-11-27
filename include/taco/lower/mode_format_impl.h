@@ -202,7 +202,7 @@ public:
                  Mode mode) const;
 
   virtual ir::Stmt
-  getFinalizeLevel(Mode mode) const;
+  getFinalizeLevel(ir::Expr prevSize, Mode mode) const;
   /// @}
 
   /// Returns arrays associated with a tensor mode

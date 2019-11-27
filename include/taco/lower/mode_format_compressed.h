@@ -52,7 +52,7 @@ public:
   virtual ir::Stmt getInsertCoord(ir::Expr parentPos, ir::Expr pos, 
                                   std::vector<ir::Expr> coords, 
                                   Mode mode) const;
-  virtual ir::Stmt getFinalizeLevel(Mode mode) const;
+  virtual ir::Stmt getFinalizeLevel(ir::Expr prevSize, Mode mode) const;
 
   virtual std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode, 
                                           int level) const;

@@ -363,9 +363,9 @@ Stmt Iterator::getInsertCoord(const Expr& parentPos, const Expr& pos,
   return getMode().getModeFormat().impl->getInsertCoord(parentPos, pos, coords, getMode());
 }
 
-Stmt Iterator::getFinalizeLevel() const {
+Stmt Iterator::getFinalizeLevel(const Expr& prevSize) const {
   taco_iassert(defined() && content->mode.defined());
-  return getMode().getModeFormat().impl->getFinalizeLevel(getMode());
+  return getMode().getModeFormat().impl->getFinalizeLevel(prevSize, getMode());
 }
 
 bool Iterator::defined() const {

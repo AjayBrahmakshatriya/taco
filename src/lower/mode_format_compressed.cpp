@@ -216,19 +216,12 @@ Stmt CompressedModeFormat::getInitCoords(Expr prevSize,
 }
 
 Stmt CompressedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
-  Expr ptrArr = getPtr(mode);
-  Expr posArr = getPosArray(mode.getModePack());
-  Stmt declPtr = VarDecl::make(ptrArr, 0);
-  Stmt allocPtr = Allocate::make(ptrArr, prevSize);
-  Expr pVar = Var::make("p", Int());
-  Stmt initPtr = For::make(pVar, 0, prevSize, 1, 
-                           Store::make(ptrArr, pVar, Load::make(posArr, pVar)));
-  return Block::make(declPtr, allocPtr, initPtr);
+  return Stmt();
 }
 
 ModeFunction CompressedModeFormat::getYieldPos(Expr parentPos, 
     std::vector<Expr> coords, Mode mode) const {
-  Expr ptrArr = getPtr(mode);
+  Expr ptrArr = getPosArray(mode.getModePack());
   Expr loadPtr = Load::make(ptrArr, parentPos);
   Expr pVar = Var::make("p" + mode.getName(), Int());
   Stmt getPtr = VarDecl::make(pVar, loadPtr);
@@ -245,8 +238,15 @@ Stmt CompressedModeFormat::getInsertCoord(Expr parentPos, Expr pos,
 
 }
 
-Stmt CompressedModeFormat::getFinalizeLevel(Mode mode) const {
-  return Free::make(getPtr(mode));
+Stmt CompressedModeFormat::getFinalizeLevel(Expr prevSize, Mode mode) const {
+  Expr posArr = getPosArray(mode.getModePack());
+  //Stmt declPtr = VarDecl::make(ptrArr, 0);
+  //Stmt allocPtr = Allocate::make(ptrArr, prevSize);
+  Expr pVar = Var::make("p", Int());
+  Stmt resetLoop = For::make(pVar, 0, prevSize, 1, 
+                             Store::make(posArr, ir::Sub::make(prevSize, pVar), Load::make(posArr, ir::Sub::make(ir::Sub::make(prevSize, pVar), 1))));
+  return Block::make(resetLoop, Store::make(posArr, 0, 0));
+  //return Block::make(declPtr, allocPtr, initPtr);
 }
 
 vector<Expr> CompressedModeFormat::getArrays(Expr tensor, int mode, 

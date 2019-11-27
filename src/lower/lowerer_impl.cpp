@@ -424,6 +424,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
                                               reducedAccesses);
       std::cout << "initResults: " << initializeResults << std::endl;
       body.push_back(initializeResults);
+      footer.push_back(Free::make(getValuesArray(queryVar)));
     }
     body.push_back(lower(query));
     stmt = to<Where>(stmt).getConsumer();
@@ -530,8 +531,10 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     body.push_back(lower(stmt));
   }
 
+  Expr prevSize = 1;
   for (const auto& resultIterator : resultIterators) {
-    footer.push_back(resultIterator.getFinalizeLevel());
+    footer.push_back(resultIterator.getFinalizeLevel(prevSize));
+    prevSize = resultIterator.getSizeNew(prevSize);
   }
 
   // Post-process result modes and allocate memory for values if necessary
