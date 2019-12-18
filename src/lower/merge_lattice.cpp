@@ -116,6 +116,10 @@ private:
     lattice = modeIterationLattice();
   }
 
+  void visit(const CoordNode* node) {
+    lattice = modeIterationLattice();
+  }
+
   void visit(const NegNode* node) {
     lattice = build(node->a);
   }

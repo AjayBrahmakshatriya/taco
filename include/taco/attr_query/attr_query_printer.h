@@ -18,6 +18,8 @@ public:
   void visit(const SelectNode* node);
   void visit(const LiteralNode* node);
   void visit(const DistinctCountNode* node);
+  void visit(const MaxNode*);
+  void visit(const MinNode*);
 
 private:
   std::ostream& os;

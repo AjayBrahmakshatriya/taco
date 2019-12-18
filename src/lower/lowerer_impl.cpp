@@ -51,6 +51,7 @@ private:
   void visit(const SequenceNode* node)      { stmt = impl->lowerSequence(node); }
   void visit(const AccessNode* node)        { expr = impl->lowerAccess(node); }
   void visit(const LiteralNode* node)       { expr = impl->lowerLiteral(node); }
+  void visit(const CoordNode* node)         { expr = impl->lowerCoord(node); }
   void visit(const NegNode* node)           { expr = impl->lowerNeg(node); }
   void visit(const AddNode* node)           { expr = impl->lowerAdd(node); }
   void visit(const SubNode* node)           { expr = impl->lowerSub(node); }
@@ -126,6 +127,10 @@ static bool hasStores(Stmt stmt) {
       hasStore = true;
     }
 
+    void visit(const Assign* stmt) {
+      hasStore = true;
+    }
+
     bool hasStores(Stmt stmt) {
       hasStore = false;
       stmt.accept(this);
@@ -142,6 +147,7 @@ static std::vector<IndexVar> getRhsFreeVars(IndexStmt stmt) {
         const AssignmentNode* n, Matcher* m) {
       const auto rhsVars = getIndexVars(n->rhs);
       const auto reductionVars = Assignment(n).getReductionVars();
+      std::cout << "reductionVars = " << util::join(reductionVars) << std::endl;
       std::vector<IndexVar> freeVarsInRHS;
       for (const auto ivar : result) {
         if (util::contains(rhsVars, ivar) && 
@@ -221,12 +227,13 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // TODO Remove this
   for (auto& temp : temporaries) {
     std::cout << "tmp: " << temp << std::endl;
-    ir::Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(),
-                                   true, true);
+    //ir::Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(),
+    //                               true, true);
+    Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(), temp.getType().getOrder() > 0);
     tensorVars.insert({temp, irVar});
     resultVars.insert({temp, irVar});
     TemporaryArrays arrays;
-    arrays.values = ir::Var::make(temp.getName(), temp.getType().getDataType(), true);
+    arrays.values = irVar;
     this->temporaryArrays.insert({temp, arrays});
     header.push_back(VarDecl::make(arrays.values, 0));
   }
@@ -294,7 +301,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
           resultDims[n->lhs.getIndices()[i]] = 
               std::make_pair(tensorVars.at(n->lhs.getTensorVar()), i);
         }
-        std::cout << "here2" << IndexStmt(n) << std::endl;
+        std::cout << "here2 " << IndexStmt(n) << std::endl;
       }
     })
   );
@@ -373,6 +380,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         taco_iassert(util::contains(tensorVars, result));
         scalars.insert({result, tensorVars.at(result)});
         header.push_back(defineScalarVariable(result, true));
+        std::cout << "define: " << header.back() << std::endl;
       }
     }
     for (auto& argument : arguments) {
@@ -392,6 +400,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Expr resultIR = resultVars.at(result);
         Expr vals = GetProperty::make(resultIR, TensorProperty::Values);
         header.push_back(Allocate::make(vals, 1));
+        std::cout << "alloc: " << header.back() << std::endl;
       }
     }
   }
@@ -415,6 +424,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // TODO: handle where statements without attribute queries
   std::vector<Stmt> body;
   std::map<std::string,AttrQueryResult> queryResults;
+  std::cout << "LOWERING STMT: " << stmt << std::endl;
   while (isa<Where>(stmt)) {
     IndexStmt query = to<Where>(stmt).getProducer();
     for (const auto& queryAccess : getResultAccesses(query).first) {
@@ -424,9 +434,13 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
                                               reducedAccesses);
       std::cout << "initResults: " << initializeResults << std::endl;
       body.push_back(initializeResults);
-      footer.push_back(Free::make(getValuesArray(queryVar)));
+      if (queryVar.getOrder() > 0) {
+        footer.push_back(Free::make(getValuesArray(queryVar)));
+      }
     }
-    body.push_back(lower(query));
+    Stmt queryStmt = lower(query);
+    //std::cout << "lowered query: " << queryStmt << std::endl;
+    body.push_back(queryStmt);
     stmt = to<Where>(stmt).getConsumer();
   }
   
@@ -443,12 +457,15 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   }
 
   const auto resultTensor = resultAccess.getTensorVar();
+  std::cout << "topResultIterator: " << util::join(topResultIterators) << std::endl;
   for (size_t i = 0; i < topResultIterators.size(); ++i) {
     this->topResultIterator = topResultIterators[i];
     this->nextTopResultIterator = Iterator();
     if (i + 1 < topResultIterators.size()) {
       this->nextTopResultIterator = topResultIterators[i+1];
     }
+    if (this->nextTopResultIterator.defined() && 
+        this->nextTopResultIterator.getParent().isRoot()) continue;
 
     Expr prevSize = this->topResultIterator.isRoot() 
                   ? 1 : getPrevSize(this->topResultIterator);
@@ -466,9 +483,9 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       auto reverse = util::reverse(coords);
       coords = std::vector<Expr>(reverse.begin(), reverse.end());
 
-      bool isSeqIter = iter.isCompact();
+      bool isSeqIter = iter.isRoot() || iter.isCompact();
       for (Iterator it = iter; isSeqIter && !it.isRoot(); it = it.getParent()) {
-        isSeqIter = iter.hasPosIter() || iter.isOrdered();
+        isSeqIter = it.hasPosIter() || it.isOrdered();
       }
 
       Stmt insertEdgeLoop;
@@ -503,6 +520,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Stmt initEdges = this->topResultIterator.getSeqInitEdges(prevSize,
             modeQueryResults.at(this->topResultIterator));
         body.push_back(Block::make(initEdges, insertEdgeLoop));
+        std::cout << "BACK: " << body.back() << std::endl;
       } else {
         taco_not_supported_yet;
       }
@@ -528,7 +546,10 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       }
     }
 
+  std::cout << "BODY: " << util::join(body) << std::endl;
+  std::cout << "stmt: " << stmt << std::endl;
     body.push_back(lower(stmt));
+  std::cout << "AFTER BODY: " << util::join(body) << std::endl;
   }
 
   Expr prevSize = 1;
@@ -564,7 +585,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
                                            freeCounters,
                                            Block::make(footer)));
 
-            //modeQueryResults.at(this->topResultIterator));
   struct ReplaceDimensionVars : public IRRewriter {
     using IRRewriter::visit;
 
@@ -587,7 +607,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     const std::map<std::pair<Expr,size_t>,std::pair<Expr,size_t>>& queryDims;
   };
   func = ReplaceDimensionVars(queryDims).rewrite(func);
-  std::cout << func << std::endl;
+  //std::cout << func << std::endl;
 
   return func;
 }
@@ -606,9 +626,17 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
       if (!assignment.getOperator().defined()) {
         return Assign::make(var, rhs);
       }
-      else {
-        taco_iassert(isa<taco::Add>(assignment.getOperator()));
+      else if (isa<taco::Add>(assignment.getOperator())) {
         return compoundAssign(var, rhs);
+      }
+      else if (isa<taco::Max>(assignment.getOperator())) {
+        const auto ret = Assign::make(var, ir::Max::make(var, rhs));
+        std::cout << "assign: " << ret << std::endl;
+        return ret;
+      }
+      else {
+        taco_not_supported_yet;
+        return Stmt();
       }
     }
     // Assignments to tensor variables (non-scalar).
@@ -656,8 +684,11 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
             isa<ir::Literal>(rhs) && !to<ir::Literal>(rhs)->equalsScalar(0))) {
           accessStmts.push_back(Store::make(values, loc, rhs));
         }
-        else {
+        else if (isa<taco::Add>(assignment.getOperator())) {
           accessStmts.push_back(compoundStore(values, loc, rhs));
+        }
+        else if (isa<taco::Max>(assignment.getOperator())) {
+          accessStmts.push_back(Store::make(values, loc, ir::Max::make(Load::make(values, loc), rhs)));
         }
       }
 
@@ -713,6 +744,38 @@ splitAppenderAndInserters(const vector<Iterator>& results) {
 }
 
 
+std::set<std::vector<IndexVar>> getActiveCounters(IndexStmt stmt) {
+  struct GetCounters : public IndexVarExprVisitor {
+    using IndexVarExprVisitor::visit;
+
+    void visit(const IndexVarCountNode* expr) {
+      counters.insert(expr->indexVars);
+    }
+
+    std::set<std::vector<IndexVar>> counters;
+  };
+
+  GetCounters getCounter;
+  match(stmt,
+    function<void(const AssignmentNode*, Matcher*)>([&](
+        const AssignmentNode* n, Matcher* m) {
+      m->match(n->rhs);
+      for (const auto index : n->lhs.getIndices()) {
+        index.accept(&getCounter);
+      }
+    }),
+    function<void(const AccessNode*, Matcher*)>([&](
+        const AccessNode* n, Matcher* m) {
+      for (const auto index : n->indices) {
+        index.accept(&getCounter);
+      }
+    })
+  );
+
+  return getCounter.counters;
+}
+
+
 Stmt LowererImpl::lowerForall(Forall forall)
 {
   MergeLattice lattice = MergeLattice::make(forall, iterators);
@@ -728,8 +791,10 @@ Stmt LowererImpl::lowerForall(Forall forall)
                                         reducedAccesses);
 
   std::vector<Stmt> initCounterStmts;
+  const auto activeCounters = getActiveCounters(forall);
   for (const auto counter : this->counters) {
-    if (counter.second.initPoint == forall.getIndexVar()) {
+    if (util::contains(activeCounters, counter.first) && 
+        counter.second.initPoint == forall.getIndexVar()) {
       const auto counterArray = counter.second.array;
       const auto counterCount = counter.second.count;
       if (counterArray.defined()) {
@@ -790,9 +855,11 @@ Stmt LowererImpl::lowerForall(Forall forall)
     loops = Stmt();
   }
 
-  return Block::make(preInitValues,
+  const auto ret = Block::make(preInitValues,
                      initCounters,
                      loops);
+  //std::cout << "forall: " << ret << std::endl;
+  return ret;
 }
 
 
@@ -1080,12 +1147,22 @@ Stmt LowererImpl::lowerWhere(Where where) {
   }
   else {
     if (generateComputeCode()) {
-      Expr values = ir::Var::make(temporary.getName(),
-                                  temporary.getType().getDataType(),
-                                  true, false);
+      //Expr values = ir::Var::make(temporary.getName(),
+      //                            temporary.getType().getDataType(),
+      //                            true, false);
+      Expr values = this->temporaryArrays.at(temporary).values;
 
-      Expr size = ir::Mul::make((uint64_t)3, Sizeof::make(values.type()));
-      Stmt allocate = VarDecl::make(values, Malloc::make(size));
+      //Expr size = ir::Mul::make((uint64_t)3, Sizeof::make(values.type()));
+      //Stmt allocate = Assign::make(values, Malloc::make(size));
+      const auto tempAccess = getResultAccesses(where.getProducer()).first[0];
+      Stmt allocate = initResultArrays({tempAccess}, {}, {});
+      std::cout << "allocate: " << allocate << std::endl;
+
+      //Expr size = 1;
+      //for (const auto dim : temporary.getType().getShape()) {
+      //  size = ir::Mul::make(size, dim);
+      //}
+      //Stmt allocate = Allocate::make(values, size);
       this->header.push_back(allocate);
 
       Stmt free = Free::make(values);
@@ -1093,9 +1170,9 @@ Stmt LowererImpl::lowerWhere(Where where) {
 
       /// Make a struct object that lowerAssignment and lowerAccess can read
       /// temporary value arrays from.
-      TemporaryArrays arrays;
-      arrays.values = values;
-      this->temporaryArrays.insert({temporary, arrays});
+      //TemporaryArrays arrays;
+      //arrays.values = values;
+      //this->temporaryArrays.insert({temporary, arrays});
     }
   }
 
@@ -1171,6 +1248,14 @@ Expr LowererImpl::lowerLiteral(Literal literal) {
       break;
   }
   return ir::Expr();
+}
+
+
+Expr LowererImpl::lowerCoord(Coord coord) {
+  const auto ret = lower(coord.getCoord());
+  taco_iassert(!ret.first.defined());
+  std::cout << "coord: " << ret.second << std::endl;
+  return ret.second;
 }
 
 
@@ -1258,7 +1343,12 @@ std::pair<Stmt,Expr> LowererImpl::lowerIndexVarLiteral(IndexVarLiteral lit) {
 std::pair<Stmt,Expr> LowererImpl::lowerIndexVarAdd(IndexVarAdd sub) {
   const auto a = lower(sub.getA());
   const auto b = lower(sub.getB());
-  const auto body = Block::make({a.first, b.first});
+
+  Stmt body;
+  if (a.first.defined() || b.first.defined()) {
+    body = Block::make({a.first, b.first});
+  }
+
   return std::make_pair(body, ir::Add::make(a.second, b.second));
 }
 
@@ -1266,7 +1356,12 @@ std::pair<Stmt,Expr> LowererImpl::lowerIndexVarAdd(IndexVarAdd sub) {
 std::pair<Stmt,Expr> LowererImpl::lowerIndexVarSub(IndexVarSub sub) {
   const auto a = lower(sub.getA());
   const auto b = lower(sub.getB());
-  const auto body = Block::make({a.first, b.first});
+
+  Stmt body;
+  if (a.first.defined() || b.first.defined()) {
+    body = Block::make({a.first, b.first});
+  }
+
   return std::make_pair(body, ir::Sub::make(a.second, b.second));
 }
 
@@ -1274,7 +1369,12 @@ std::pair<Stmt,Expr> LowererImpl::lowerIndexVarSub(IndexVarSub sub) {
 std::pair<Stmt,Expr> LowererImpl::lowerIndexVarDiv(IndexVarDiv div) {
   const auto a = lower(div.getA());
   const auto b = lower(div.getB());
-  const auto body = Block::make({a.first, b.first});
+
+  Stmt body;
+  if (a.first.defined() || b.first.defined()) {
+    body = Block::make({a.first, b.first});
+  }
+
   return std::make_pair(body, ir::Div::make(a.second, b.second));
 }
 
@@ -2084,21 +2184,31 @@ Stmt LowererImpl::getCounterCounts(Forall forall) const {
 
 
 Stmt LowererImpl::incrementCounters(Forall forall) const {
+#if 0
   const auto rhsFreeVars = getRhsFreeVars(forall);
+  std::cout << "rhsFreeVars = " << util::join(rhsFreeVars) << std::endl;
   if (rhsFreeVars.size() != 1 || rhsFreeVars[0] != forall.getIndexVar()) {
+//    return Stmt();
+  }
+#else
+  if (isa<Forall>(forall.getStmt())) {
     return Stmt();
   }
+#endif
 
   std::vector<Stmt> incStmts;
+  const auto activeCounters = getActiveCounters(forall);
   for (const auto counter : this->counters) {
-    const auto counterArray = counter.second.array;
-    const auto counterCount = counter.second.count;
-    Expr incExpr = ir::Add::make(counterCount, 1);
-    if (counterArray.defined()) {
-      Expr index = generateDenseArrayIndex(counter.second.indices);
-      incStmts.push_back(Store::make(counterArray, index, incExpr));
-    } else {
-      incStmts.push_back(Assign::make(counterCount, incExpr));
+    if (util::contains(activeCounters, counter.first)) {
+      const auto counterArray = counter.second.array;
+      const auto counterCount = counter.second.count;
+      Expr incExpr = ir::Add::make(counterCount, 1);
+      if (counterArray.defined()) {
+        Expr index = generateDenseArrayIndex(counter.second.indices);
+        incStmts.push_back(Store::make(counterArray, index, incExpr));
+      } else {
+        incStmts.push_back(Assign::make(counterCount, incExpr));
+      }
     }
   }
   return Block::make(incStmts);

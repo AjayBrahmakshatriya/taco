@@ -49,6 +49,28 @@ struct DistinctCountNode : public AttrQueryNode {
 };
 
 
+struct MaxNode : public AttrQueryNode {
+  MaxNode(IndexVarExpr coord) : coord(coord) {}
+
+  void accept(AttrQueryVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  IndexVarExpr coord;
+};
+
+
+struct MinNode : public AttrQueryNode {
+  MinNode(IndexVarExpr coord) : coord(coord) {}
+
+  void accept(AttrQueryVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  IndexVarExpr coord;
+};
+
+
 /// Returns true if expression e is of type E.
 template <typename E>
 inline bool isa(const AttrQueryNode* e) {

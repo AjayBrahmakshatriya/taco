@@ -13,6 +13,8 @@ class AttrQuery;
 struct SelectNode;
 struct LiteralNode;
 struct DistinctCountNode;
+struct MaxNode;
+struct MinNode;
 
 class AttrQueryVisitorStrict {
 public:
@@ -23,6 +25,8 @@ public:
   virtual void visit(const SelectNode*) = 0;
   virtual void visit(const LiteralNode*) = 0;
   virtual void visit(const DistinctCountNode*) = 0;
+  virtual void visit(const MaxNode*) = 0;
+  virtual void visit(const MinNode*) = 0;
 };
 
 /// Visit nodes in an attribute query.
@@ -35,6 +39,8 @@ public:
   virtual void visit(const SelectNode* node);
   virtual void visit(const LiteralNode* node);
   virtual void visit(const DistinctCountNode* node);
+  virtual void visit(const MaxNode*);
+  virtual void visit(const MinNode*);
 };
 
 }}

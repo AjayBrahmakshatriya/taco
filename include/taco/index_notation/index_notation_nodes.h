@@ -155,6 +155,16 @@ struct LiteralNode : public IndexExprNode {
   void* val;
 };
 
+struct CoordNode : public IndexExprNode {
+  CoordNode(IndexVarExpr coord) : IndexExprNode(Int()), coord(coord) {}
+
+  void accept(IndexExprVisitorStrict* v) const {
+    v->visit(this);
+  }
+
+  IndexVarExpr coord;
+};
+
 
 struct UnaryExprNode : public IndexExprNode {
   IndexExpr a;

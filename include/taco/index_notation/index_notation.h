@@ -43,6 +43,7 @@ struct IndexVarCountNode;
 struct AccessNode;
 struct SlicedAccessNode;
 struct LiteralNode;
+struct CoordNode;
 struct NegNode;
 struct SqrtNode;
 struct AddNode;
@@ -276,6 +277,12 @@ public:
   IndexExpr(std::complex<float>);
   IndexExpr(std::complex<double>);
 
+  /// Construct index var expression.
+  ///```
+  /// a(i) = i;
+  ///```
+  IndexExpr(IndexVarExpr);
+
   Datatype getDataType() const;
 
   /// Store the index expression's result to a dense workspace w.r.t. index
@@ -452,6 +459,18 @@ public:
   template <typename T> T getVal() const;
 
   typedef LiteralNode Node;
+};
+
+
+class Coord : public IndexExpr {
+public:
+  Coord() = default;
+  Coord(const CoordNode*);
+  Coord(IndexVarExpr coord);
+
+  IndexVarExpr getCoord() const;
+
+  typedef CoordNode Node;
 };
 
 

@@ -29,4 +29,10 @@ void AttrQueryVisitor::visit(const LiteralNode* op) {
 void AttrQueryVisitor::visit(const DistinctCountNode* op) {
 }
 
+void AttrQueryVisitor::visit(const MaxNode* op) {
+}
+
+void AttrQueryVisitor::visit(const MinNode* op) {
+}
+
 }}

@@ -58,7 +58,8 @@ std::vector<attr_query::AttrQuery>
 CompressedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
   std::vector<IndexVarExpr> groupBys(coords.begin(), coords.end() - 1);
   const auto countQuery = attr_query::Select(groupBys, 
-      std::make_pair(attr_query::DistinctCount(coords.back()), "nnz"));
+//      std::make_pair(attr_query::DistinctCount(coords.back()), "nnz"));
+      std::make_pair(attr_query::Max(coords.back()), "nnz"));
   return {countQuery};
 }
 
@@ -235,7 +236,6 @@ Stmt CompressedModeFormat::getInsertCoord(Expr parentPos, Expr pos,
   Expr crdArray = getCoordArray(mode.getModePack());
   Expr stride = (int)mode.getModePack().getNumModes();
   return Store::make(crdArray, ir::Mul::make(pos, stride), coords.back());
-
 }
 
 Stmt CompressedModeFormat::getFinalizeLevel(Expr prevSize, Mode mode) const {

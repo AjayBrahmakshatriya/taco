@@ -87,6 +87,7 @@ public:
   static ModeFormat singleton;   /// e.g., second mode in COO
   static ModeFormat squeezed;    /// e.g., first mode in DIA
   static ModeFormat offset;      /// e.g., last mode in DIA
+  static ModeFormat sliced;      /// e.g., first mode in ELL
 
   static ModeFormat sparse;      /// alias for compressed
   static ModeFormat Dense;       /// alias for dense
@@ -95,6 +96,7 @@ public:
   static ModeFormat Singleton;   /// alias for singleton
   static ModeFormat Squeezed;    /// alias for squeezed
   static ModeFormat Offset;      /// alias for offset
+  static ModeFormat Sliced;      /// alias for sliced
 
   /// Properties of a mode format
   enum Property {
@@ -184,6 +186,7 @@ extern const ModeFormat Sparse;
 extern const ModeFormat Singleton;
 extern const ModeFormat Squeezed;
 extern const ModeFormat Offset;
+extern const ModeFormat Sliced;
 
 extern const ModeFormat dense;
 extern const ModeFormat compressed;
@@ -191,6 +194,7 @@ extern const ModeFormat sparse;
 extern const ModeFormat singleton;
 extern const ModeFormat squeezed;
 extern const ModeFormat offset;
+extern const ModeFormat sliced;
 
 extern const Format CSR;
 extern const Format CSC;

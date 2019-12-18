@@ -347,6 +347,9 @@ IndexExpr::IndexExpr(std::complex<float> val) :IndexExpr(new LiteralNode(val)){
 IndexExpr::IndexExpr(std::complex<double> val) :IndexExpr(new LiteralNode(val)){
 }
 
+IndexExpr::IndexExpr(IndexVarExpr coord) :IndexExpr(new CoordNode(coord)){
+}
+
 Datatype IndexExpr::getDataType() const {
   return const_cast<IndexExprNode*>(this->ptr)->getDataType();
 }
@@ -450,6 +453,19 @@ struct Equals : public IndexNotationVisitorStrict {
     eq = true;
   }
 
+  void visit(const CoordNode* anode) {
+    if (!isa<CoordNode>(bExpr.ptr)) {
+      eq = false;
+      return;
+    }
+    auto bnode = to<CoordNode>(bExpr.ptr);
+    if (!equals(anode->coord, bnode->coord)) {
+      eq = false;
+      return;
+    }
+    eq = true;
+  }
+  
   template <class T>
   bool unaryEquals(const T* anode, IndexExpr b) {
     if (!isa<T>(b.ptr)) {
@@ -892,6 +908,27 @@ template <> bool isa<Literal>(IndexExpr e) {
 template <> Literal to<Literal>(IndexExpr e) {
   taco_iassert(isa<Literal>(e));
   return Literal(to<LiteralNode>(e.ptr));
+}
+
+
+// class Coord
+Coord::Coord(const CoordNode* n) : IndexExpr(n) {
+}
+
+Coord::Coord(IndexVarExpr coord) : Coord(new CoordNode(coord)) {
+}
+
+IndexVarExpr Coord::getCoord() const {
+  return getNode(*this)->coord;
+}
+
+template <> bool isa<Coord>(IndexExpr e) {
+  return isa<CoordNode>(e.ptr);
+}
+
+template <> Coord to<Coord>(IndexExpr e) {
+  taco_iassert(isa<Coord>(e));
+  return Coord(to<CoordNode>(e.ptr));
 }
 
 
@@ -2197,10 +2234,17 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       elseValue = false;
       reduceOp = Add();
       std::vector<Dimension> dims(groupBys.size() + 1);
-      TensorVar tmp("tmp", Type(Bool, dims));
+      TensorVar tmp("tmp_attr_", Type(Bool, dims));
       std::vector<IndexVarExpr> indices = groupBys;
       indices.push_back(node->coord);
       tmpResult = Access(tmp, indices);
+      resultType = Int();
+    }
+
+    void visit(const attr_query::MaxNode* node) {
+      ifValue = Add(node->coord, 1);
+      reduceOp = Max();
+      tmpResult = Access();
       resultType = Int();
     }
 
@@ -2285,6 +2329,76 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     std::set<TensorVar>* tmpResults;
   };
   IndexStmt queries = InsertQueries().rewrite(stmt, &tmpResults);
+
+  struct CounterToHistogram : public IndexNotationRewriter {
+    using IndexNotationRewriter::visit;
+
+    IndexStmt rewrite(IndexStmt stmt) {
+      aggr = IndexStmt();
+      IndexStmt rewrittenStmt = IndexNotationRewriter::rewrite(stmt);
+      if (aggr.defined()) {
+        rewrittenStmt = Where(aggr, rewrittenStmt);
+      }
+      return rewrittenStmt;
+    }
+
+    void visit(const AssignmentNode* op) {
+      if (!op->op.defined() || !isa<Max>(op->op)) {
+        stmt = op;
+        return;
+      }
+      
+      if (!isa<Map>(op->rhs)) {
+        stmt = op;
+        return;
+      }
+
+      Map rhs = to<Map>(op->rhs);
+      if (!isa<Access>(rhs.getIn()) || !isa<Add>(rhs.getOut())) {
+        stmt = op;
+        return;
+      }
+
+      Add out = to<Add>(rhs.getOut());
+      if (!isa<Coord>(out.getA()) || !isa<Literal>(out.getB())) {
+        stmt = op;
+        return;
+      }
+
+      Literal b = to<Literal>(out.getB());
+      if (b.getVal<int>() != 1) {
+        stmt = op;
+        return;
+      }
+      Coord a = to<Coord>(out.getA());
+      if (!isa<IndexVarCount>(a.getCoord())) {
+        stmt = op;
+        return;
+      }
+
+      Access inAccess = to<Access>(rhs.getIn());      
+      const auto& countVars = to<IndexVarCount>(a.getCoord()).getIndexVars();
+      std::cout << "countvars: " << util::join(countVars) << std::endl;
+      
+      Access lhs = to<Access>(op->lhs);
+      std::vector<Dimension> dims(countVars.size());
+      TensorVar tmp("tmp_attr_", Type(Int32, dims));
+      std::vector<IndexVarExpr> indices = lhs.getIndices();
+      for (const auto& countVar : countVars) {
+        indices.push_back(countVar);
+      }
+
+      stmt = Assignment(Access(tmp, indices), Map(to<Access>(rhs.getIn()), 1), Add());
+      
+      aggr = Assignment(lhs, Access(tmp, indices), Max());
+      for (const auto index : util::reverse(countVars)) {
+        aggr = Forall(index, aggr);
+      }
+    }
+
+    IndexStmt aggr;
+  };
+  queries = CounterToHistogram().rewrite(queries);
 
   struct EliminateRedundantReductions : public IndexNotationRewriter {
     using IndexNotationRewriter::visit;
@@ -2702,6 +2816,10 @@ private:
   }
 
   void visit(const LiteralNode* op) {
+    expr = op;
+  }
+
+  void visit(const CoordNode* op) {
     expr = op;
   }
 

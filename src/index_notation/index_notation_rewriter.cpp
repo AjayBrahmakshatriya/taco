@@ -113,6 +113,10 @@ void IndexNotationRewriter::visit(const LiteralNode* op) {
   expr = op;
 }
 
+void IndexNotationRewriter::visit(const CoordNode* op) {
+  expr = op;
+}
+
 template <class T>
 IndexExpr visitBinaryOp(const T *op, IndexNotationRewriter *rw) {
   IndexExpr a = rw->rewrite(op->a);

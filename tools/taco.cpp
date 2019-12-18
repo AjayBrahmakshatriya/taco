@@ -299,6 +299,9 @@ int main(int argc, char* argv[]) {
           case 'o':
             modeTypes.push_back(ModeFormat::Offset);
             break;
+          case 'l':
+            modeTypes.push_back(ModeFormat::Sliced);
+            break;
           default:
             return reportError("Incorrect format descriptor", 3);
             break;

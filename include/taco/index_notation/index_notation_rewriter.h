@@ -66,6 +66,7 @@ protected:
   virtual void visit(const AccessNode* op) = 0;
   virtual void visit(const SlicedAccessNode*) = 0;
   virtual void visit(const LiteralNode* op) = 0;
+  virtual void visit(const CoordNode*) = 0;
   virtual void visit(const NegNode* op) = 0;
   virtual void visit(const SqrtNode* op) = 0;
   virtual void visit(const AddNode* op) = 0;
@@ -130,6 +131,7 @@ protected:
   virtual void visit(const AccessNode* op);
   virtual void visit(const SlicedAccessNode* node);
   virtual void visit(const LiteralNode* op);
+  virtual void visit(const CoordNode* node);
   virtual void visit(const NegNode* op);
   virtual void visit(const SqrtNode* op);
   virtual void visit(const AddNode* op);

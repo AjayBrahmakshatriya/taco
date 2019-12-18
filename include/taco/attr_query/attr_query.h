@@ -19,6 +19,8 @@ namespace attr_query {
 struct SelectNode;
 struct LiteralNode;
 struct DistinctCountNode;
+struct MaxNode;
+struct MinNode;
 
 class AttrQueryVisitorStrict;
 
@@ -96,20 +98,31 @@ public:
 };
 
 
-#if 0
 class Max : public AttrQuery {
 public:
   Max();
   Max(const MaxNode*);
-  Max(AttrQuery a, AttrQuery b);
+  Max(IndexVarExpr coord);
 
-  AttrQuery getA() const;
-  AttrQuery getB() const;
+  IndexVarExpr getCoord() const;
 
   typedef MaxNode Node;
 };
 
 
+class Min : public AttrQuery {
+public:
+  Min();
+  Min(const MinNode*);
+  Min(IndexVarExpr coord);
+
+  IndexVarExpr getCoord() const;
+
+  typedef MinNode Node;
+};
+
+
+#if 0
 class Count : public AttrQuery {
 public:
   Count();

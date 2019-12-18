@@ -411,7 +411,8 @@ void IRRewriter::visit(const Allocate* op) {
     stmt = op;
   }
   else {
-    stmt = Allocate::make(var, num_elements, op->is_realloc, op->old_elements);
+    stmt = Allocate::make(var, num_elements, op->is_realloc, op->old_elements, 
+                          op->zero_init);
   }
 }
 

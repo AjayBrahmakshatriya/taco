@@ -23,6 +23,7 @@ struct BinaryIndexVarExprNode;
 struct AccessNode;
 struct SlicedAccessNode;
 struct LiteralNode;
+struct CoordNode;
 struct NegNode;
 struct AddNode;
 struct SubNode;
@@ -89,6 +90,7 @@ public:
   virtual void visit(const AccessNode*) = 0;
   virtual void visit(const SlicedAccessNode*) = 0;
   virtual void visit(const LiteralNode*) = 0;
+  virtual void visit(const CoordNode*) = 0;
   virtual void visit(const NegNode*) = 0;
   virtual void visit(const AddNode*) = 0;
   virtual void visit(const SubNode*) = 0;
@@ -138,6 +140,7 @@ public:
   virtual void visit(const AccessNode* node);
   virtual void visit(const SlicedAccessNode* node);
   virtual void visit(const LiteralNode* node);
+  virtual void visit(const CoordNode* node);
   virtual void visit(const NegNode* node);
   virtual void visit(const AddNode* node);
   virtual void visit(const SubNode* node);
@@ -209,6 +212,7 @@ private:
   RULE(AccessNode)
   RULE(SlicedAccessNode)
   RULE(LiteralNode)
+  RULE(CoordNode)
   RULE(NegNode)
   RULE(SqrtNode)
   RULE(AddNode)

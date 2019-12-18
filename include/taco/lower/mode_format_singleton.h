@@ -27,6 +27,17 @@ public:
   virtual ir::Stmt getAppendFinalizeLevel(ir::Expr parentSize, ir::Expr size, 
                                           Mode mode) const;
 
+  virtual ir::Expr getSizeNew(ir::Expr prevSize, Mode mode) const;
+  virtual ir::Stmt getInitCoords(ir::Expr prevSize, 
+                                 std::map<std::string,AttrQueryResult> queries, 
+                                 Mode mode) const;
+  virtual ir::Stmt getInsertCoord(ir::Expr parentPos, ir::Expr pos, 
+                                  std::vector<ir::Expr> coords, 
+                                  Mode mode) const;
+  virtual ModeFunction getYieldPos(ir::Expr parentPos, 
+                                   std::vector<ir::Expr> coords, 
+                                   Mode mode) const;
+  
   virtual std::vector<ir::Expr> getArrays(ir::Expr tensor, int mode, 
                                           int level) const;
 

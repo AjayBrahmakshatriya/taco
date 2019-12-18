@@ -102,4 +102,48 @@ template <> DistinctCount to<DistinctCount>(AttrQuery s) {
   return DistinctCount(to<DistinctCountNode>(s.ptr));
 }
 
+
+// class Max
+Max::Max(const MaxNode* n) : AttrQuery(n) {
+}
+
+Max::Max(IndexVarExpr coord)
+    : Max(new MaxNode(coord)) {
+}
+
+IndexVarExpr Max::getCoord() const {
+  return getNode(*this)->coord;
+}
+
+template <> bool isa<Max>(AttrQuery s) {
+  return isa<MaxNode>(s.ptr);
+}
+
+template <> Max to<Max>(AttrQuery s) {
+  taco_iassert(isa<Max>(s));
+  return Max(to<MaxNode>(s.ptr));
+}
+
+
+// class Min
+Min::Min(const MinNode* n) : AttrQuery(n) {
+}
+
+Min::Min(IndexVarExpr coord)
+    : Min(new MinNode(coord)) {
+}
+
+IndexVarExpr Min::getCoord() const {
+  return getNode(*this)->coord;
+}
+
+template <> bool isa<Min>(AttrQuery s) {
+  return isa<MinNode>(s.ptr);
+}
+
+template <> Min to<Min>(AttrQuery s) {
+  taco_iassert(isa<Min>(s));
+  return Min(to<MinNode>(s.ptr));
+}
+
 }}

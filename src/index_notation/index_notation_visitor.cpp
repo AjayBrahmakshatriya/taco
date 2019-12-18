@@ -80,6 +80,9 @@ void IndexNotationVisitor::visit(const SlicedAccessNode* op) {
 void IndexNotationVisitor::visit(const LiteralNode* op) {
 }
 
+void IndexNotationVisitor::visit(const CoordNode* op) {
+}
+
 void IndexNotationVisitor::visit(const NegNode* op) {
   visit(static_cast<const UnaryExprNode*>(op));
 }

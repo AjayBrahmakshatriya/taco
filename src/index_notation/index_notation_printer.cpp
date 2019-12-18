@@ -143,6 +143,10 @@ void IndexNotationPrinter::visit(const LiteralNode* op) {
   }
 }
 
+void IndexNotationPrinter::visit(const CoordNode* op) {
+  os << op->coord;
+}
+
 void IndexNotationPrinter::visit(const NegNode* op) {
   Precedence precedence = Precedence::NEG;
   bool parenthesize =  precedence > parentPrecedence;

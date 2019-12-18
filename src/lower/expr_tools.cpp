@@ -66,6 +66,10 @@ vector<IndexExpr> getAvailableExpressions(const IndexExpr& expr,
       activeExpressions.push({op,true});
     }
 
+    void visit(const CoordNode* op) {
+      taco_not_supported_yet;
+    }
+
     void visit(const UnaryExprNode* op) {
       op->a.accept(this);
       taco_iassert(activeExpressions.size() >= 1);
@@ -207,6 +211,10 @@ private:
 
   void visit(const LiteralNode* op) {
     subExpr = IndexExpr();
+  }
+
+  void visit(const CoordNode* op) {
+    taco_not_supported_yet;
   }
 
   template <class T>

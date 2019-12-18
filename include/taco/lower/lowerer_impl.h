@@ -37,6 +37,7 @@ class Sequence;
 class IndexExpr;
 class Access;
 class Literal;
+class Coord;
 class Neg;
 class Add;
 class Sub;
@@ -172,6 +173,9 @@ protected:
 
   /// Lower a literal expression.
   virtual ir::Expr lowerLiteral(Literal literal);
+
+  /// Lower a coordinate expression.
+  virtual ir::Expr lowerCoord(Coord coord);
 
   /// Lower a negate expression.
   virtual ir::Expr lowerNeg(Neg neg);

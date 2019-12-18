@@ -54,6 +54,7 @@ public:
   void visit(const AccessNode*);
   void visit(const SlicedAccessNode* node);
   void visit(const LiteralNode*);
+  void visit(const CoordNode*);
   void visit(const NegNode*);
   void visit(const SqrtNode*);
   void visit(const AddNode*);

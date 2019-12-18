@@ -64,6 +64,10 @@ std::string AttrQueryResult::getName() const {
 
 Expr AttrQueryResult::getResult(const std::vector<Expr>& indices,
                                 const std::string& attr) const {
+  if (indices.empty()) {
+    return resultValues;
+  }
+
   Expr pos = 0;
   for (int i = indices.size() - 1; i >= 0; --i) {
     Expr dim = GetProperty::make(resultVarExpr, TensorProperty::Dimension, i);
