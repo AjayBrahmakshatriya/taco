@@ -160,7 +160,6 @@ CodeGen_C::CodeGen_C(std::ostream &dest, OutputKind outputKind)
 CodeGen_C::~CodeGen_C() {}
 
 void CodeGen_C::compile(Stmt stmt, bool isFirst) {
-  std::cout << stmt << std::endl;
   if (isFirst) {
     // output the headers
     out << cHeaders;

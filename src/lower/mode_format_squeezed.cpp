@@ -83,8 +83,9 @@ Stmt SqueezedModeFormat::getInitYieldPos(Expr prevSize, Mode mode) const {
   Stmt copyPermSize = VarDecl::make(permSize, Load::make(permSizeArray, 0));
   Expr pVar = Var::make("p", Int());
   Expr permArray = getPermArray(mode.getModePack());
+  Expr shift = Load::make(getShiftArray(mode.getModePack()), 0);
   Stmt initRperm = For::make(pVar, 0, permSize, 1, 
-                             Store::make(rpermArr, Load::make(permArray, pVar), pVar));
+                             Store::make(rpermArr, ir::Add::make(Load::make(permArray, pVar), shift), pVar));
   return Block::make(declRperm, allocRperm, copyPermSize, initRperm);
 }
 
@@ -92,7 +93,8 @@ ModeFunction SqueezedModeFormat::getYieldPos(Expr parentPos,
     std::vector<Expr> coords, Mode mode) const {
   Expr shift = Load::make(getShiftArray(mode.getModePack()), 0);
   const auto pos = ir::Add::make(ir::Mul::make(parentPos, getLocalPermSize(mode)),
-                                 Load::make(getRperm(mode), ir::Add::make(coords.back(), shift)));
+                                 Load::make(getRperm(mode), coords.back()));
+                                 //Load::make(getRperm(mode), ir::Add::make(coords.back(), shift)));
   return ModeFunction(Stmt(), {pos});
 }
 
