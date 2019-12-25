@@ -582,9 +582,12 @@ Iterators::createAccessIterators(Access access, Format format, Expr tensorIR)
     for (auto& modeType : modeTypePack.getModeFormats()) {
       int modeNumber = format.getModeOrdering()[level-1];
       Dimension dim = shape.getDimension(modeNumber);
-      IndexVar indexVar = isa<IndexVarAccess>(access.getIndices()[modeNumber]) 
+      IndexVar indexVar;
+      if (level <= (int)access.getIndices().size()) {
+        indexVar = isa<IndexVarAccess>(access.getIndices()[modeNumber]) 
                         ? to<IndexVarAccess>(access.getIndices()[modeNumber]).getIndexVar() 
                         : computedIndexVars[modeNumber];
+      }
       Mode mode(tensorIR, dim, level, modeType, modePack, pos,
                 parentModeType);
 
@@ -595,6 +598,9 @@ Iterators::createAccessIterators(Access access, Format format, Expr tensorIR)
       parent = iterator;
       parentModeType = modeType;
       pos++;
+      if (level > (int)access.getIndices().size()) {
+        return;
+      }
       level++;
     }
   }

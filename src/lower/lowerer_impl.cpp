@@ -1203,9 +1203,21 @@ Expr LowererImpl::lowerAccess(Access access) {
     return getTensorVar(var);
   }
 
-  return getIterators(access).back().isUnique()
-         ? Load::make(getValuesArray(var), generateValueLocExpr(access))
-         : getReducedValueVar(access);
+  if (!getIterators(access).back().isUnique()) {
+    return getReducedValueVar(access);
+  }
+  
+  Expr pos = generateValueLocExpr(access);
+  if (var.getType().getOrder() == (int)access.getIndices().size()) {
+    return Load::make(getValuesArray(var), pos);
+  } else {
+    const auto lastIter = getIterators(access).back();
+    taco_iassert(lastIter.hasPosIter());
+    std::cout << "lastIter: " << lastIter << std::endl;
+    ModeFunction bounds = lastIter.posBounds(pos);
+    taco_iassert(!bounds.compute().defined());
+    return ir::Sub::make(bounds[1], bounds[0]);
+  }
 }
 
 
@@ -1454,7 +1466,8 @@ Expr LowererImpl::getCardinality(const std::vector<IndexVar>& indexVars) const {
 std::vector<Iterator> LowererImpl::getIterators(Access access) const {
   vector<Iterator> result;
   TensorVar tensor = access.getTensorVar();
-  for (int i = 0; i < tensor.getOrder(); i++) {
+  //for (int i = 0; i < tensor.getOrder(); i++) {
+  for (int i = 0; i <= std::min((int)access.getIndices().size(), tensor.getOrder() - 1); i++) {
     int mode = tensor.getFormat().getModeOrdering()[i];
     result.push_back(iterators.levelIterator(ModeAccess(access, mode+1)));
   }
@@ -1555,6 +1568,7 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
                                    set<Access> reducedAccesses) {
   multimap<IndexVar, Iterator> readIterators;
   for (auto& read : reads) {
+    std::cout << "READ: " << read << std::endl;
     for (auto& readIterator : getIterators(read)) {
       readIterators.insert({readIterator.getIndexVar(), readIterator});
     }
@@ -2141,7 +2155,10 @@ Expr LowererImpl::generateValueLocExpr(Access access) const {
   if (isScalar(access.getTensorVar().getType())) {
     return ir::Literal::make(0);
   }
-  Iterator it = getIterators(access).back();
+  const auto iterators = getIterators(access);
+  std::cout << "ITERATORS: " << util::join(iterators) << " " << access << std::endl;
+  Iterator it = (access.getTensorVar().getOrder() == (int)access.getIndices().size()) 
+              ? iterators.back() : iterators[iterators.size() - 2];
   return it.getPosVar();
 }
 

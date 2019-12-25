@@ -2332,8 +2332,10 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
 
   struct CounterToHistogram : public IndexNotationRewriter {
     using IndexNotationRewriter::visit;
+    using IndexNotationRewriter::rewrite;
 
-    IndexStmt rewrite(IndexStmt stmt) {
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps) {
+      tmpResults = tmps;
       aggr = IndexStmt();
       IndexStmt rewrittenStmt = IndexNotationRewriter::rewrite(stmt);
       if (aggr.defined()) {
@@ -2383,6 +2385,7 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       Access lhs = to<Access>(op->lhs);
       std::vector<Dimension> dims(countVars.size());
       TensorVar tmp("tmp_attr_", Type(Int32, dims));
+      tmpResults->insert(tmp);
       std::vector<IndexVarExpr> indices = lhs.getIndices();
       for (const auto& countVar : countVars) {
         indices.push_back(countVar);
@@ -2396,9 +2399,71 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       }
     }
 
+  private:
+    std::set<TensorVar>* tmpResults;
     IndexStmt aggr;
   };
-  queries = CounterToHistogram().rewrite(queries);
+  queries = CounterToHistogram().rewrite(queries, &tmpResults);
+
+  struct SimplifyVariableWidthCount : public IndexNotationRewriter {
+    using IndexNotationRewriter::visit;
+    using IndexNotationRewriter::rewrite;
+    
+    IndexStmt rewrite(IndexStmt stmt, std::set<TensorVar>* tmps) {
+      tmpResults = tmps;
+      return IndexNotationRewriter::rewrite(stmt);
+    }
+
+    void visit(const ForallNode* op) {
+      if (!isa<Assignment>(op->stmt)) {
+        IndexStmt body = rewrite(op->stmt);
+        if (body != op->stmt) {
+          stmt = Forall(op->indexVar, body);
+        } else {
+          stmt = op;
+        }
+        return;
+      }
+
+      Assignment body = to<Assignment>(op->stmt);
+
+      if (!body.getOperator().defined() || !isa<Add>(body.getOperator())) {
+        stmt = op;
+        return;
+      }
+      
+      if (!isa<Map>(body.getRhs())) {
+        stmt = op;
+        return;
+      }
+
+      Map rhs = to<Map>(body.getRhs());
+
+      if (!isa<Access>(rhs.getIn()) || !isa<Literal>(rhs.getOut())) {
+        stmt = op;
+        return;
+      }
+
+      Access inAccess = to<Access>(rhs.getIn());
+      Access lhs = body.getLhs();
+
+      TensorVar inTensor = inAccess.getTensorVar();
+      std::cout << "INACCESS: " << inAccess << std::endl;
+      const auto inIndexVars = inAccess.getIndexVars();
+      std::cout << "HERE: " << IndexStmt(op) << std::endl;
+      std::vector<IndexVar> indexVars(inIndexVars.begin(), inIndexVars.end() - 1);
+      //indexVars.pop_back();
+
+      stmt = Assignment(lhs, Mul(Access(inTensor, indexVars), rhs.getOut()), Add());
+      //tmpResults->insert(inTensor);
+      std::cout << "here: " << stmt << std::endl;
+    }
+
+  private:
+    std::set<TensorVar>* tmpResults;
+  };
+  queries = SimplifyVariableWidthCount().rewrite(queries, &tmpResults);
+  std::cout << "After SimplifyVarWidthCount: " << queries << std::endl;
 
   struct EliminateRedundantReductions : public IndexNotationRewriter {
     using IndexNotationRewriter::visit;
@@ -2415,12 +2480,20 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     }
     
     void visit(const AssignmentNode* op) {
+      std::cout << "simplify " << IndexStmt(op) << std::endl;
       std::set<IndexVar> accessVars;
       for (const auto& index : op->lhs.getIndices()) {
         if (isa<IndexVarAccess>(index)) {
           accessVars.insert(to<IndexVarAccess>(index).getIndexVar());
         }
       }
+      std::cout << util::join(accessVars) << std::endl;
+      std::cout << util::join(indexVars) << std::endl;
+      std::cout << op->op.defined() << std::endl;
+      std::cout << (accessVars == indexVars) << std::endl;
+      std::cout << util::join(*tmpResults) << std::endl;
+      std::cout << op->lhs.getTensorVar() << std::endl;
+      std::cout << util::contains(*tmpResults, op->lhs.getTensorVar()) << std::endl;
       if (op->op.defined() && accessVars == indexVars && 
           util::contains(*tmpResults, op->lhs.getTensorVar())) {
         stmt = new AssignmentNode(op->lhs, op->rhs, IndexExpr());
