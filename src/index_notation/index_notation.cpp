@@ -2445,16 +2445,18 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       }
 
       Access inAccess = to<Access>(rhs.getIn());
-      Access lhs = body.getLhs();
-
       TensorVar inTensor = inAccess.getTensorVar();
-      std::cout << "INACCESS: " << inAccess << std::endl;
       const auto inIndexVars = inAccess.getIndexVars();
-      std::cout << "HERE: " << IndexStmt(op) << std::endl;
-      std::vector<IndexVar> indexVars(inIndexVars.begin(), inIndexVars.end() - 1);
-      //indexVars.pop_back();
 
-      stmt = Assignment(lhs, Mul(Access(inTensor, indexVars), rhs.getOut()), Add());
+      // check for innermost index variable condition and make sure is reduction variable
+      if (inTensor.getFormat().getModeOrdering()[inIndexVars.size() - 1] != ((int)inIndexVars.size() - 1) ||
+          util::contains(body.getLhs().getIndexVars(), inIndexVars.back())) {
+        stmt = op;
+        return;
+      }
+
+      std::vector<IndexVar> indexVars(inIndexVars.begin(), inIndexVars.end() - 1);
+      stmt = Assignment(body.getLhs(), Mul(Access(inTensor, indexVars), rhs.getOut()), Add());
       //tmpResults->insert(inTensor);
       std::cout << "here: " << stmt << std::endl;
     }
