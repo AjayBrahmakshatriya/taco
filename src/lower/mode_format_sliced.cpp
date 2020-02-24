@@ -41,7 +41,8 @@ ModeFormat SlicedModeFormat::copy(
 }
 
 std::vector<attr_query::AttrQuery>
-SlicedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
+SlicedModeFormat::attrQueries(std::vector<IndexVarExpr> coords, 
+                              std::vector<IndexVarExpr> vals) const {
   const auto maxQuery = attr_query::Select({}, 
       std::make_pair(attr_query::Max(coords.back()), "max_coord"));
   return {maxQuery};

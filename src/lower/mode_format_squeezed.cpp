@@ -45,7 +45,8 @@ ModeFormat SqueezedModeFormat::copy(
 }
 
 std::vector<attr_query::AttrQuery>
-SqueezedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
+SqueezedModeFormat::attrQueries(std::vector<IndexVarExpr> coords,
+                                std::vector<IndexVarExpr> vals) const {
   return {attr_query::Select({coords.back()}, 
       std::make_pair(attr_query::Literal(1), "nonempty"))};
 }

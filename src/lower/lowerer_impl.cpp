@@ -16,6 +16,7 @@
 #include "taco/lower/mode_format_impl.h"
 
 #include <algorithm>
+#include <iterator>
 
 using namespace std;
 using namespace taco::ir;
@@ -138,6 +139,23 @@ static bool hasStores(Stmt stmt) {
     }
   };
   return stmt.defined() && FindStores().hasStores(stmt);
+}
+
+static std::set<IndexVar> getMaybeFusedVars(IndexStmt stmt, Iterators iterators) {
+  std::set<IndexVar> result;
+  match(stmt,
+    function<void(const ForallNode*, Matcher*)>([&](
+        const ForallNode* n, Matcher* m) {
+      MergeLattice lattice = MergeLattice::make(Forall(n), iterators);
+      if (lattice.iterators().size() == 1 && 
+          lattice.iterators()[0].isBranchless() && 
+          !lattice.iterators()[0].isDimensionIterator()) {
+        result.insert(n->indexVar);
+      }
+      m->match(n->stmt);
+    })
+  );
+  return result; 
 }
 
 static std::vector<IndexVar> getRhsFreeVars(IndexStmt stmt) {
@@ -329,8 +347,9 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
   struct GenerateCounters : public IndexVarExprVisitor {
     GenerateCounters(std::map<std::vector<IndexVar>,Counter>& counters,
-                     const std::vector<IndexVar>& rhsFreeVars) : 
-        counters(counters), rhsFreeVars(rhsFreeVars) {}
+                     const std::vector<IndexVar>& rhsFreeVars,
+                     const std::set<IndexVar>& maybeFusedVars) : 
+        counters(counters), rhsFreeVars(rhsFreeVars), maybeFusedVars(maybeFusedVars) {}
 
     using IndexVarExprVisitor::visit;
 
@@ -341,10 +360,19 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       std::copy_if(rhsFreeVars.begin(), rhsFreeVars.end(), 
                    std::back_inserter(indexVars), 
                    [&](IndexVar ivar) { return util::contains(expr->indexVars, ivar); });
+      std::cout << util::join(rhsFreeVars) << std::endl;
+      std::cout << util::join(indexVars) << std::endl;
 
-      const auto initPoint = std::mismatch(rhsFreeVars.begin(), 
-                                           rhsFreeVars.end(), 
-                                           indexVars.begin());
+      auto initPoint = std::mismatch(rhsFreeVars.begin(), rhsFreeVars.end(), 
+                                     indexVars.begin());
+      while (util::contains(maybeFusedVars, *initPoint.first)) {
+        --initPoint.first;
+        --initPoint.second;
+      }
+
+      int idx = std::distance(rhsFreeVars.begin(), initPoint.first);
+      std::cout << "idx: " << idx << std::endl;
+
       const bool useArrayForCounter = (indexVars.end() - initPoint.second);
       Counter counter;
       if (useArrayForCounter) {
@@ -358,15 +386,18 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
     std::map<std::vector<IndexVar>,Counter>& counters;
     const std::vector<IndexVar>& rhsFreeVars;
+    const std::set<IndexVar>& maybeFusedVars;
   };
 
   const auto rhsFreeVars = getRhsFreeVars(stmt);
-  GenerateCounters counterGen(this->counters, rhsFreeVars);
+  const auto maybeFusedVars = getMaybeFusedVars(stmt, iterators);
+  GenerateCounters counterGen(this->counters, rhsFreeVars, maybeFusedVars);
   match(stmt,
     function<void(const AssignmentNode*, Matcher*)>([&](
         const AssignmentNode* n, Matcher* m) {
       m->match(n->rhs);
       for (const auto index : n->lhs.getIndices()) {
+        std::cout << "index: " << index << std::endl;
         index.accept(&counterGen);
       }
     })
@@ -593,6 +624,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
     void visit(const GetProperty* op) {
       if (op->property == TensorProperty::Dimension) {
+        std::cout << op->name << std::endl;
         const auto p = op->name.find("_attr_");
         if (p != std::string::npos) {
           const auto equivalentDim = queryDims.at(std::make_pair(op->tensor, (size_t)op->mode));
@@ -615,6 +647,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
 Stmt LowererImpl::lowerAssignment(Assignment assignment)
 {
+  std::cout << "assign: " << assignment << std::endl;
   TensorVar result = assignment.getLhs().getTensorVar();
 
   if (generateComputeCode()) {
@@ -679,6 +712,7 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
         ++i;
       }
 
+      std::cout << values.type() << std::endl;
       if (!this->nextTopResultIterator.defined()) {
         if (!assignment.getOperator().defined() || (values.type() == Bool && 
             isa<ir::Literal>(rhs) && !to<ir::Literal>(rhs)->equalsScalar(0))) {
@@ -812,7 +846,8 @@ Stmt LowererImpl::lowerForall(Forall forall)
 
   Stmt loops;
   // Emit a loop that iterates over over a single iterator (optimization)
-  if (lattice.iterators().size() == 1 && lattice.iterators()[0].isUnique()) {
+  //if (lattice.iterators().size() == 1 && lattice.iterators()[0].isUnique()) {
+  if (lattice.iterators().size() == 1) {
     taco_iassert(lattice.points().size() == 1);
 
     MergePoint point = lattice.points()[0];
@@ -915,7 +950,7 @@ Stmt LowererImpl::lowerForallPosition(Forall forall, Iterator iterator,
   Stmt boundsCompute;
   Expr startBound, endBound;
   Expr parentPos = iterator.getParent().getPosVar();
-  if (iterator.getParent().isRoot() || iterator.getParent().isUnique()) {
+  if (iterator.getParent().isRoot() || iterator.getParent().isUnique() || iterator.isBranchless()) {
     // E.g. a compressed mode without duplicates
     ModeFunction bounds = iterator.posBounds(parentPos);
     boundsCompute = bounds.compute();

@@ -16,7 +16,7 @@ public:
   virtual ModeFormat copy(std::vector<ModeFormat::Property> properties) const;
   
   virtual std::vector<attr_query::AttrQuery>
-  attrQueries(std::vector<IndexVarExpr> coords) const;
+  attrQueries(std::vector<IndexVarExpr> coords, std::vector<IndexVarExpr> vals) const;
   
   virtual ModeFunction posIterBounds(ir::Expr parentPos, Mode mode) const;
   virtual ModeFunction posIterAccess(ir::Expr pos, std::vector<ir::Expr> coords,

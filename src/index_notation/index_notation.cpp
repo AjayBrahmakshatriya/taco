@@ -2295,13 +2295,15 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
 
       IndexStmt aggrs;
       std::vector<IndexVarExpr> sliceIndices;
+      std::vector<IndexVarExpr> remainingIndices = indices;
       for (size_t i = 0; i < indices.size(); ++i) {
         const auto index = indices[modeOrdering[i]];  // TODO: check permutation
         const auto modeName = resultTensor.getName() + std::to_string(i + 1);
         sliceIndices.push_back(index);
+        remainingIndices.erase(remainingIndices.begin());
 
         const auto modeFormat = modeFormats[i];
-        for (const auto query : modeFormat.impl->attrQueries(sliceIndices)) {
+        for (const auto query : modeFormat.impl->attrQueries(sliceIndices, remainingIndices)) {
           Assignment aggr;
           IndexStmt epilog;
           std::tie(aggr, epilog) = LowerAttrQuery().lower(query, op, modeName);
@@ -2451,6 +2453,11 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       // check for innermost index variable condition and make sure is reduction variable
       if (inTensor.getFormat().getModeOrdering()[inIndexVars.size() - 1] != ((int)inIndexVars.size() - 1) ||
           util::contains(body.getLhs().getIndexVars(), inIndexVars.back())) {
+        stmt = op;
+        return;
+      }
+
+      if (inTensor.getFormat().getModeFormats().back().isBranchless()) {
         stmt = op;
         return;
       }

@@ -101,7 +101,8 @@ ModeFormatImpl::~ModeFormatImpl() {
 }
 
 std::vector<attr_query::AttrQuery>
-ModeFormatImpl::attrQueries(std::vector<IndexVarExpr> coords) const {
+ModeFormatImpl::attrQueries(std::vector<IndexVarExpr> coords,
+                            std::vector<IndexVarExpr> vals) const {
   return std::vector<attr_query::AttrQuery>();
 }
 

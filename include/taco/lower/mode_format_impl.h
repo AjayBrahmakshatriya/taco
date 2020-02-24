@@ -93,7 +93,7 @@ public:
 
 
   virtual std::vector<attr_query::AttrQuery>
-  attrQueries(std::vector<IndexVarExpr> coords) const;
+  attrQueries(std::vector<IndexVarExpr> coords, std::vector<IndexVarExpr> vals) const;
 
 
   /// The coordinate iteration capability's iterator function computes a range

@@ -55,7 +55,8 @@ ModeFormat CompressedModeFormat::copy(
 }
 
 std::vector<attr_query::AttrQuery>
-CompressedModeFormat::attrQueries(std::vector<IndexVarExpr> coords) const {
+CompressedModeFormat::attrQueries(std::vector<IndexVarExpr> coords,
+                                  std::vector<IndexVarExpr> vals) const {
   std::vector<IndexVarExpr> groupBys(coords.begin(), coords.end() - 1);
   const auto countQuery = attr_query::Select(groupBys, 
       std::make_pair(attr_query::DistinctCount(coords.back()), "nnz"));

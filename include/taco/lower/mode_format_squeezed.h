@@ -15,7 +15,7 @@ public:
   virtual ModeFormat copy(std::vector<ModeFormat::Property> properties) const;
   
   virtual std::vector<attr_query::AttrQuery>
-  attrQueries(std::vector<IndexVarExpr> coords) const;
+  attrQueries(std::vector<IndexVarExpr> coords, std::vector<IndexVarExpr> vals) const;
   
   virtual ir::Expr getSizeNew(ir::Expr prevSize, Mode mode) const;
   virtual ir::Stmt getInitCoords(ir::Expr prevSize, 
