@@ -39,13 +39,13 @@ struct LiteralNode : public AttrQueryNode {
 
 
 struct DistinctCountNode : public AttrQueryNode {
-  DistinctCountNode(IndexVarExpr coord) : coord(coord) {}
+  DistinctCountNode(const std::vector<IndexVarExpr>& coords) : coords(coords) {}
 
   void accept(AttrQueryVisitorStrict* v) const {
     v->visit(this);
   }
 
-  IndexVarExpr coord;
+  std::vector<IndexVarExpr> coords;
 };
 
 

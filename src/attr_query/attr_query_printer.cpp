@@ -31,7 +31,7 @@ void AttrQueryPrinter::visit(const LiteralNode* op) {
 }
 
 void AttrQueryPrinter::visit(const DistinctCountNode* op) {
-  os << "distinct_count(" << op->coord << ")";
+  os << "distinct_count(" << util::join(op->coords) << ")";
 }
 
 void AttrQueryPrinter::visit(const MaxNode* op) {

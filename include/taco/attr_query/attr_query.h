@@ -91,8 +91,9 @@ public:
   DistinctCount() = default;
   DistinctCount(const DistinctCountNode*);
   DistinctCount(IndexVarExpr coord);
+  DistinctCount(const std::vector<IndexVarExpr>& coord);
 
-  IndexVarExpr getCoord() const;
+  const std::vector<IndexVarExpr>& getCoords() const;
 
   typedef DistinctCountNode Node;
 };

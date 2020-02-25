@@ -86,11 +86,15 @@ DistinctCount::DistinctCount(const DistinctCountNode* n) : AttrQuery(n) {
 }
 
 DistinctCount::DistinctCount(IndexVarExpr coord)
-    : DistinctCount(new DistinctCountNode(coord)) {
+    : DistinctCount(new DistinctCountNode({coord})) {
 }
 
-IndexVarExpr DistinctCount::getCoord() const {
-  return getNode(*this)->coord;
+DistinctCount::DistinctCount(const std::vector<IndexVarExpr>& coords)
+    : DistinctCount(new DistinctCountNode(coords)) {
+}
+
+const std::vector<IndexVarExpr>& DistinctCount::getCoords() const {
+  return getNode(*this)->coords;
 }
 
 template <> bool isa<DistinctCount>(AttrQuery s) {

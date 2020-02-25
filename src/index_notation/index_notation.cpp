@@ -2207,7 +2207,9 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
           Access queryAccess(queryResult, queryIndices);
 
           std::vector<IndexVar> tmpIndices = queryIndices;
-          tmpIndices.emplace_back();
+          while (tmpIndices.size() < to<Access>(tmpResult).getIndices().size()) {
+            tmpIndices.emplace_back();
+          }
           Access tmpAccess(to<Access>(tmpResult).getTensorVar(), tmpIndices);
           epilog = Assignment(queryAccess, Cast(tmpAccess, Int()), Add());
           for (const auto index : util::reverse(tmpIndices)) {
@@ -2233,10 +2235,11 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       ifValue = true;
       elseValue = false;
       reduceOp = Add();
-      std::vector<Dimension> dims(groupBys.size() + 1);
-      TensorVar tmp("tmp_attr_", Type(Bool, dims));
       std::vector<IndexVarExpr> indices = groupBys;
-      indices.push_back(node->coord);
+      indices.insert(indices.end(), node->coords.begin(), node->coords.end());
+      std::vector<Dimension> dims(indices.size());
+      std::cout << "dim size = " << dims.size() << std::endl;
+      TensorVar tmp("tmp_attr_", Type(Bool, dims));
       tmpResult = Access(tmp, indices);
       resultType = Int();
     }
