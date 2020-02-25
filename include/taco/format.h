@@ -97,6 +97,7 @@ public:
   static ModeFormat Squeezed;    /// alias for squeezed
   static ModeFormat Offset;      /// alias for offset
   static ModeFormat Sliced;      /// alias for sliced
+  static ModeFormat Tiled(int size);
 
   /// Properties of a mode format
   enum Property {

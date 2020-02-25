@@ -112,7 +112,8 @@ static Format initFormat(Format format) {
         arrayTypes.push_back(Int32);
         arrayTypes.push_back(Int32);
       } else if (modeType.getName() == Offset.getName() ||
-                 modeType.getName() == Sliced.getName()) {
+                 modeType.getName() == Sliced.getName() ||
+                 modeType.getName() == ModeFormat::Tiled(0).getName()) {
         // do nothing
       } else {
         taco_not_supported_yet;

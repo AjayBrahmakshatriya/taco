@@ -54,6 +54,9 @@ struct TensorStorage::Content {
       } else if (modeType.getName() == Sliced.getName()) {
         // TODO: fix this
         modeTypes[i] = taco_mode_sparse;
+      } else if (modeType.getName() == ModeFormat::Tiled(0).getName()) {
+        // TODO: fix this
+        modeTypes[i] = taco_mode_sparse;
       } else {
         taco_not_supported_yet;
       }

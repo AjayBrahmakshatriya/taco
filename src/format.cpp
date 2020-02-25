@@ -12,6 +12,7 @@
 #include "taco/lower/mode_format_squeezed.h"
 #include "taco/lower/mode_format_offset.h"
 #include "taco/lower/mode_format_sliced.h"
+#include "taco/lower/mode_format_block.h"
 
 #include "taco/error.h"
 #include "taco/util/strings.h"
@@ -353,6 +354,9 @@ ModeFormat ModeFormat::Singleton(std::make_shared<SingletonModeFormat>());
 ModeFormat ModeFormat::Squeezed(std::make_shared<SqueezedModeFormat>());
 ModeFormat ModeFormat::Offset(std::make_shared<OffsetModeFormat>());
 ModeFormat ModeFormat::Sliced(std::make_shared<SlicedModeFormat>());
+ModeFormat ModeFormat::Tiled(int size) {
+  return ModeFormat(std::make_shared<BlockModeFormat>(size));
+}
 
 ModeFormat ModeFormat::dense = ModeFormat::Dense;
 ModeFormat ModeFormat::compressed = ModeFormat::Compressed;
