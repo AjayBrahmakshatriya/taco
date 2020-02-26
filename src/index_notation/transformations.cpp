@@ -254,7 +254,7 @@ IndexStmt Precompute::apply(IndexStmt stmt, std::string* reason) const {
         IndexVar iw = precompute.getiw();
 
         IndexStmt consumer = forall(i, replace(s, {{e, ws(i)}}));
-        IndexStmt producer = forall(iw, ws(iw) = replace(e, {{i,iw}}));
+        IndexStmt producer = forall(iw, ws(iw) = replace(e, std::map<IndexVar,IndexVar>({{i,iw}})));
         Where where(consumer, producer);
 
         stmt = where;
