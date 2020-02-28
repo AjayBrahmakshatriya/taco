@@ -2298,7 +2298,11 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
 
       IndexStmt aggrs;
       std::vector<IndexVarExpr> sliceIndices;
-      std::vector<IndexVarExpr> remainingIndices = indices;
+      std::vector<IndexVarExpr> remainingIndices;
+      for (size_t i = 0; i < indices.size(); ++i) {
+        const auto index = indices[modeOrdering[i]];  // TODO: check permutation
+        remainingIndices.push_back(index);
+      }
       for (size_t i = 0; i < indices.size(); ++i) {
         const auto index = indices[modeOrdering[i]];  // TODO: check permutation
         const auto modeName = resultTensor.getName() + std::to_string(i + 1);
@@ -2497,6 +2501,8 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       for (const auto& index : op->lhs.getIndices()) {
         if (isa<IndexVarAccess>(index)) {
           accessVars.insert(to<IndexVarAccess>(index).getIndexVar());
+        } else {
+          std::cout << index << " is not an index var access" << std::endl;
         }
       }
       std::cout << util::join(accessVars) << std::endl;

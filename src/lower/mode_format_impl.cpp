@@ -69,7 +69,7 @@ Expr AttrQueryResult::getResult(const std::vector<Expr>& indices,
   }
 
   Expr pos = 0;
-  for (int i = indices.size() - 1; i >= 0; --i) {
+  for (int i = 0; i < (int)indices.size(); ++i) {
     Expr dim = GetProperty::make(resultVarExpr, TensorProperty::Dimension, i);
     pos = ir::Add::make(ir::Mul::make(pos, dim), indices[i]);
   }

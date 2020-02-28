@@ -217,6 +217,7 @@ int main(int argc, char* argv[]) {
 
   bool writeCompute        = false;
   bool writeAssemble       = false;
+  bool writeEvaluate       = false;
   bool writeKernels        = false;
   bool loaded              = false;
   bool verify              = false;
@@ -249,6 +250,7 @@ int main(int argc, char* argv[]) {
   string outputDirectory;
   string writeComputeFilename;
   string writeAssembleFilename;
+  string writeEvaluateFilename;
   string writeKernelFilename;
   string writeTimeFilename;
   vector<string> declaredTensors;
@@ -513,6 +515,10 @@ int main(int argc, char* argv[]) {
       writeAssembleFilename = argValue;
       writeAssemble = true;
     }
+    else if ("-write-evaluate" == argName) {
+      writeEvaluateFilename = argValue;
+      writeEvaluate = true;
+    }
     else if ("-write-source" == argName) {
       writeKernelFilename = argValue;
       writeKernels = true;
@@ -567,7 +573,7 @@ int main(int argc, char* argv[]) {
 
   // Print compute is the default if nothing else was asked for
   if (!printAssemble && !printEvaluate && !printIterationGraph &&
-      !writeCompute && !writeAssemble && !writeKernels && !readKernels &&
+      !writeCompute && !writeAssemble && !writeEvaluate && !writeKernels && !readKernels &&
       !printKernels && !loaded) {
     printCompute = true;
   }
@@ -862,6 +868,18 @@ int main(int argc, char* argv[]) {
     filestream << endl;
     std::shared_ptr<ir::CodeGen> codegenFile = ir::CodeGen::init_default(filestream, ir::CodeGen::ImplementationGen);
     codegenFile->compile(assemble, false);
+    filestream.close();
+  }
+
+  if (writeEvaluate) {
+    std::ofstream filestream;
+    filestream.open(writeEvaluateFilename,
+                    std::ofstream::out|std::ofstream::trunc);
+    filestream << gentext << endl << "// ";
+    printCommandLine(filestream, argc, argv);
+    filestream << endl;
+    std::shared_ptr<ir::CodeGen> codegenFile = ir::CodeGen::init_default(filestream, ir::CodeGen::ImplementationGen);
+    codegenFile->compile(evaluate, true);
     filestream.close();
   }
 
