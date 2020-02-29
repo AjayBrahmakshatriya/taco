@@ -52,7 +52,7 @@ ir::Stmt lower(IndexStmt stmt, std::string name, bool assemble, bool compute,
   std::string messages;
   verify(lowered, &messages);
   if (!messages.empty()) {
-    std::cerr << "Verifier messages:\n" << messages << "\n";
+    //std::cerr << "Verifier messages:\n" << messages << "\n";
   }
   
   return lowered;
