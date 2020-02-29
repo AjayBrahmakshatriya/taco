@@ -1850,7 +1850,6 @@ static bool isValid(Assignment assignment, string* reason) {
 
 // functions
 bool isEinsumNotation(IndexStmt stmt, std::string* reason) {
-  std::cout << stmt << std::endl;
   return true;
   INIT_REASON(reason);
 
@@ -2171,14 +2170,11 @@ IndexStmt makeConcreteNotation(IndexStmt stmt) {
 
 
 IndexStmt insertAttributeQueries(IndexStmt stmt) {
-  std::cout << "stmt: " << stmt << std::endl;
-
   struct LowerAttrQuery : public attr_query::AttrQueryVisitor {
     using AttrQueryVisitor::visit;
 
     std::pair<Assignment,IndexStmt> lower(attr_query::AttrQuery q, 
                                           Assignment s, std::string name) {
-      std::cout << q << std::endl;
       assign = s;
       modeName = name + "_attr_";
       aggr = Assignment();
@@ -2218,8 +2214,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
         } else {
           aggr = Assignment(Access(queryResult, groupBys), val, reduceOp);
         }
-        std::cout << tmpResult << std::endl;
-        std::cout << aggr << std::endl;
       }
     }
 
@@ -2238,7 +2232,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       std::vector<IndexVarExpr> indices = groupBys;
       indices.insert(indices.end(), node->coords.begin(), node->coords.end());
       std::vector<Dimension> dims(indices.size());
-      std::cout << "dim size = " << dims.size() << std::endl;
       TensorVar tmp("tmp_attr_", Type(Bool, dims));
       tmpResult = Access(tmp, indices);
       resultType = Int();
@@ -2389,7 +2382,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
 
       Access inAccess = to<Access>(rhs.getIn());      
       const auto& countVars = to<IndexVarCount>(a.getCoord()).getIndexVars();
-      std::cout << "countvars: " << util::join(countVars) << std::endl;
       
       Access lhs = to<Access>(op->lhs);
       std::vector<Dimension> dims(countVars.size());
@@ -2472,14 +2464,12 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
       std::vector<IndexVar> indexVars(inIndexVars.begin(), inIndexVars.end() - 1);
       stmt = Assignment(body.getLhs(), Mul(Access(inTensor, indexVars), rhs.getOut()), Add());
       //tmpResults->insert(inTensor);
-      std::cout << "here: " << stmt << std::endl;
     }
 
   private:
     std::set<TensorVar>* tmpResults;
   };
   queries = SimplifyVariableWidthCount().rewrite(queries, &tmpResults);
-  std::cout << "After SimplifyVarWidthCount: " << queries << std::endl;
 
   struct EliminateRedundantReductions : public IndexNotationRewriter {
     using IndexNotationRewriter::visit;
@@ -2496,22 +2486,12 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
     }
     
     void visit(const AssignmentNode* op) {
-      std::cout << "simplify " << IndexStmt(op) << std::endl;
       std::set<IndexVar> accessVars;
       for (const auto& index : op->lhs.getIndices()) {
         if (isa<IndexVarAccess>(index)) {
           accessVars.insert(to<IndexVarAccess>(index).getIndexVar());
-        } else {
-          std::cout << index << " is not an index var access" << std::endl;
         }
       }
-      std::cout << util::join(accessVars) << std::endl;
-      std::cout << util::join(indexVars) << std::endl;
-      std::cout << op->op.defined() << std::endl;
-      std::cout << (accessVars == indexVars) << std::endl;
-      std::cout << util::join(*tmpResults) << std::endl;
-      std::cout << op->lhs.getTensorVar() << std::endl;
-      std::cout << util::contains(*tmpResults, op->lhs.getTensorVar()) << std::endl;
       if (op->op.defined() && accessVars == indexVars && 
           util::contains(*tmpResults, op->lhs.getTensorVar())) {
         stmt = new AssignmentNode(op->lhs, op->rhs, IndexExpr());
@@ -2567,7 +2547,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
 
         std::vector<IndexVarExpr> indices;
         for (const auto index : tmpUse[lhsTensor].second.getLhs().getIndices()) {
-          std::cout << index << std::endl;
           indices.push_back(ReplaceIndex(indexMap).rewrite(index));
         }
         IndexExpr reduceOp = tmpUse[lhsTensor].second.getOperator();
@@ -2576,9 +2555,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
         if (rhs.getDataType() != queryResult.getType().getDataType()) {
           rhs = Cast(rhs, queryResult.getType().getDataType());
         }
-        std::cout << Assignment(op) << std::endl;
-        std::cout << util::join(indexMap) << std::endl;
-        std::cout << util::join(indices) << std::endl;
         stmt = Assignment(Access(queryResult, indices), rhs, reduceOp);
         inlinedResults->insert(queryResult);
       } else {
@@ -2589,7 +2565,6 @@ IndexStmt insertAttributeQueries(IndexStmt stmt) {
           const auto rhsTensor = rhsAccess.getTensorVar();
           if (util::contains(*tmpResults, rhsTensor)) {
             tmpUse[rhsTensor] = std::make_pair(rhsAccess, Assignment(op));
-            std::cout << rhsAccess << std::endl;
           }
         }
         stmt = op;

@@ -165,7 +165,6 @@ static std::vector<IndexVar> getRhsFreeVars(IndexStmt stmt) {
         const AssignmentNode* n, Matcher* m) {
       const auto rhsVars = getIndexVars(n->rhs);
       const auto reductionVars = Assignment(n).getReductionVars();
-      std::cout << "reductionVars = " << util::join(reductionVars) << std::endl;
       std::vector<IndexVar> freeVarsInRHS;
       for (const auto ivar : result) {
         if (util::contains(rhsVars, ivar) && 
@@ -226,7 +225,6 @@ static Expr getPrevSize(const Iterator iter) {
 Stmt
 LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 {
-  std::cout << stmt << std::endl;
   this->assemble = assemble;
   this->compute = compute;
 
@@ -244,7 +242,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // Create variables for temporaries
   // TODO Remove this
   for (auto& temp : temporaries) {
-    std::cout << "tmp: " << temp << std::endl;
     //ir::Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(),
     //                               true, true);
     Expr irVar = ir::Var::make(temp.getName(), temp.getType().getDataType(), temp.getType().getOrder() > 0);
@@ -319,7 +316,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
           resultDims[n->lhs.getIndices()[i]] = 
               std::make_pair(tensorVars.at(n->lhs.getTensorVar()), i);
         }
-        std::cout << "here2 " << IndexStmt(n) << std::endl;
       }
     })
   );
@@ -330,9 +326,7 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       if (p != std::string::npos) {
         for (size_t i = 0; i < n->lhs.getIndices().size(); ++i) {
           for (const auto resultDim : resultDims) {
-            std::cout << resultDim.first << " " << n->lhs.getIndices()[i] << std::endl;
             if (equals(resultDim.first, n->lhs.getIndices()[i])) {
-              std::cout << "here3" << std::endl;
               queryDims[std::make_pair(tensorVars.at(n->lhs.getTensorVar()), i)] = resultDim.second;
               break;
             }
@@ -341,9 +335,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       }
     })
   );
-  for (const auto it : queryDims) {
-    std::cout << it.first.first << " " << it.first.second << " " << it.second.first << " " << it.second.second << std::endl;
-  }
 
   struct GenerateCounters : public IndexVarExprVisitor {
     GenerateCounters(std::map<std::vector<IndexVar>,Counter>& counters,
@@ -360,8 +351,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       std::copy_if(rhsFreeVars.begin(), rhsFreeVars.end(), 
                    std::back_inserter(indexVars), 
                    [&](IndexVar ivar) { return util::contains(expr->indexVars, ivar); });
-      std::cout << util::join(rhsFreeVars) << std::endl;
-      std::cout << util::join(indexVars) << std::endl;
 
       auto initPoint = std::mismatch(rhsFreeVars.begin(), rhsFreeVars.end(), 
                                      indexVars.begin());
@@ -369,9 +358,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         --initPoint.first;
         --initPoint.second;
       }
-
-      int idx = std::distance(rhsFreeVars.begin(), initPoint.first);
-      std::cout << "idx: " << idx << std::endl;
 
       const bool useArrayForCounter = (indexVars.end() - initPoint.second);
       Counter counter;
@@ -397,7 +383,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         const AssignmentNode* n, Matcher* m) {
       m->match(n->rhs);
       for (const auto index : n->lhs.getIndices()) {
-        std::cout << "index: " << index << std::endl;
         index.accept(&counterGen);
       }
     })
@@ -411,7 +396,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         taco_iassert(util::contains(tensorVars, result));
         scalars.insert({result, tensorVars.at(result)});
         header.push_back(defineScalarVariable(result, true));
-        std::cout << "define: " << header.back() << std::endl;
       }
     }
     for (auto& argument : arguments) {
@@ -431,7 +415,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Expr resultIR = resultVars.at(result);
         Expr vals = GetProperty::make(resultIR, TensorProperty::Values);
         header.push_back(Allocate::make(vals, 1));
-        std::cout << "alloc: " << header.back() << std::endl;
       }
     }
   }
@@ -455,7 +438,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   // TODO: handle where statements without attribute queries
   std::vector<Stmt> body;
   std::map<std::string,AttrQueryResult> queryResults;
-  std::cout << "LOWERING STMT: " << stmt << std::endl;
   while (isa<Where>(stmt)) {
     IndexStmt query = to<Where>(stmt).getProducer();
     for (const auto& queryAccess : getResultAccesses(query).first) {
@@ -463,7 +445,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
       queryResults[queryVar.getName()] = AttrQueryResult(queryVar, getTensorVar(queryVar), getValuesArray(queryVar));
       Stmt initializeResults = initResultArrays({queryAccess}, inputAccesses, 
                                               reducedAccesses);
-      std::cout << "initResults: " << initializeResults << std::endl;
       body.push_back(initializeResults);
       if (queryVar.getOrder() > 0) {
         footer.push_back(Free::make(getValuesArray(queryVar)));
@@ -488,7 +469,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
   }
 
   const auto resultTensor = resultAccess.getTensorVar();
-  std::cout << "topResultIterator: " << util::join(topResultIterators) << std::endl;
   for (size_t i = 0; i < topResultIterators.size(); ++i) {
     this->topResultIterator = topResultIterators[i];
     this->nextTopResultIterator = Iterator();
@@ -551,7 +531,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Stmt initEdges = this->topResultIterator.getSeqInitEdges(prevSize,
             modeQueryResults.at(this->topResultIterator));
         body.push_back(Block::make(initEdges, insertEdgeLoop));
-        std::cout << "BACK: " << body.back() << std::endl;
       } else {
         taco_not_supported_yet;
       }
@@ -572,15 +551,11 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
         Stmt initializeResults = initResultArrays(resultAccesses, inputAccesses, 
                                                   reducedAccesses);
         body.push_back(initializeResults);
-        std::cout << "initialize: " << initializeResults << std::endl;
         break;
       }
     }
 
-  std::cout << "BODY: " << util::join(body) << std::endl;
-  std::cout << "stmt: " << stmt << std::endl;
     body.push_back(lower(stmt));
-  std::cout << "AFTER BODY: " << util::join(body) << std::endl;
   }
 
   Expr prevSize = 1;
@@ -591,7 +566,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
   // Post-process result modes and allocate memory for values if necessary
   Stmt finalizeResults = finalizeResultArrays(resultAccesses);
-  std::cout << "finalize: " << finalizeResults << std::endl;
 
   // Store scalar stack variables back to results
   if (generateComputeCode()) {
@@ -624,11 +598,9 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
     void visit(const GetProperty* op) {
       if (op->property == TensorProperty::Dimension) {
-        std::cout << op->name << std::endl;
         const auto p = op->name.find("_attr_");
         if (p != std::string::npos) {
           const auto equivalentDim = queryDims.at(std::make_pair(op->tensor, (size_t)op->mode));
-          std::cout << "here " << Expr(op) << equivalentDim.first << std::endl;
           expr = GetProperty::make(equivalentDim.first, TensorProperty::Dimension, equivalentDim.second);
           return;
         }
@@ -639,7 +611,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
     const std::map<std::pair<Expr,size_t>,std::pair<Expr,size_t>>& queryDims;
   };
   func = ReplaceDimensionVars(queryDims).rewrite(func);
-  //std::cout << func << std::endl;
 
   return func;
 }
@@ -647,7 +618,6 @@ LowererImpl::lower(IndexStmt stmt, string name, bool assemble, bool compute)
 
 Stmt LowererImpl::lowerAssignment(Assignment assignment)
 {
-  std::cout << "assign: " << assignment << std::endl;
   TensorVar result = assignment.getLhs().getTensorVar();
 
   if (generateComputeCode()) {
@@ -664,7 +634,6 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
       }
       else if (isa<taco::Max>(assignment.getOperator())) {
         const auto ret = Assign::make(var, ir::Max::make(var, rhs));
-        std::cout << "assign: " << ret << std::endl;
         return ret;
       }
       else {
@@ -712,7 +681,6 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
         ++i;
       }
 
-      std::cout << values.type() << std::endl;
       if (!this->nextTopResultIterator.defined()) {
         if (!assignment.getOperator().defined() || (values.type() == Bool && 
             isa<ir::Literal>(rhs) && !to<ir::Literal>(rhs)->equalsScalar(0))) {
@@ -893,7 +861,6 @@ Stmt LowererImpl::lowerForall(Forall forall)
   const auto ret = Block::make(preInitValues,
                      initCounters,
                      loops);
-  //std::cout << "forall: " << ret << std::endl;
   return ret;
 }
 
@@ -1191,7 +1158,6 @@ Stmt LowererImpl::lowerWhere(Where where) {
       //Stmt allocate = Assign::make(values, Malloc::make(size));
       const auto tempAccess = getResultAccesses(where.getProducer()).first[0];
       Stmt allocate = initResultArrays({tempAccess}, {}, {});
-      std::cout << "allocate: " << allocate << std::endl;
 
       //Expr size = 1;
       //for (const auto dim : temporary.getType().getShape()) {
@@ -1248,7 +1214,6 @@ Expr LowererImpl::lowerAccess(Access access) {
   } else {
     const auto lastIter = getIterators(access).back();
     taco_iassert(lastIter.hasPosIter());
-    std::cout << "lastIter: " << lastIter << std::endl;
     ModeFunction bounds = lastIter.posBounds(pos);
     taco_iassert(!bounds.compute().defined());
     return ir::Sub::make(bounds[1], bounds[0]);
@@ -1301,7 +1266,6 @@ Expr LowererImpl::lowerLiteral(Literal literal) {
 Expr LowererImpl::lowerCoord(Coord coord) {
   const auto ret = lower(coord.getCoord());
   taco_iassert(!ret.first.defined());
-  std::cout << "coord: " << ret.second << std::endl;
   return ret.second;
 }
 
@@ -1603,7 +1567,6 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
                                    set<Access> reducedAccesses) {
   multimap<IndexVar, Iterator> readIterators;
   for (auto& read : reads) {
-    std::cout << "READ: " << read << std::endl;
     for (auto& readIterator : getIterators(read)) {
       readIterators.insert({readIterator.getIndexVar(), readIterator});
     }
@@ -1611,7 +1574,6 @@ Stmt LowererImpl::initResultArrays(vector<Access> writes,
 
   std::vector<Stmt> result;
   for (auto& write : writes) {
-    std::cout << "write: " << write << std::endl;
     if (write.getTensorVar().getOrder() == 0) continue;
 
     std::vector<Stmt> initArrays;
@@ -2191,7 +2153,6 @@ Expr LowererImpl::generateValueLocExpr(Access access) const {
     return ir::Literal::make(0);
   }
   const auto iterators = getIterators(access);
-  std::cout << "ITERATORS: " << util::join(iterators) << " " << access << std::endl;
   Iterator it = (access.getTensorVar().getOrder() == (int)access.getIndices().size()) 
               ? iterators.back() : iterators[iterators.size() - 2];
   return it.getPosVar();
