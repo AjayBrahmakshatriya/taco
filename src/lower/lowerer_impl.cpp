@@ -295,11 +295,11 @@ Stmt LowererImpl::lowerAssignment(Assignment assignment)
   Expr filter = rhs; // TODO: check if require filtering
   if (leafIterator.hasAppend()) {
     Stmt appendCoord = appendCoordinate(leafIterator, Expr(), filter);
-    if (filter.defined()) {
-      appendCoord = IfThenElse::make(Neq::make(filter, 0.0), appendCoord);
-    }
     if (appendCoord.defined()) {
       computeStmt = Block::make(computeStmt, appendCoord);
+    }
+    if (filter.defined() && computeStmt.defined()) {
+      computeStmt = IfThenElse::make(Neq::make(filter, 0.0), computeStmt);
     }
   }
   
